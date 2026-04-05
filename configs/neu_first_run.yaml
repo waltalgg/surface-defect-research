@@ -1,0 +1,36 @@
+experiment:
+  name: neu_first_run
+  seed: 42
+  output_dir: artifacts/runs/neu_first_run
+
+dataset:
+  raw_dir: data/raw/neu_steel
+  processed_dir: data/processed
+  manifest_path: data/dataset/neu_steel_manifest.json
+  image_size: 128
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  allowed_extensions:
+    - .bmp
+  max_images_per_class: null
+
+training:
+  batch_size: 32
+  epochs: 5
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  num_workers: 0
+  device: cpu
+
+model:
+  name: small_cnn
+  dropout: 0.2
+
+synthetic:
+  enabled: false
+  multiplier: 1.0
+  output_dir: data/processed/synthetic_neu
+
+evaluation:
+  checkpoint_path: artifacts/runs/neu_first_run/best.pt

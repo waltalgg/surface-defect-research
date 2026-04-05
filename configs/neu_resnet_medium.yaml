@@ -1,0 +1,42 @@
+experiment:
+  name: neu_resnet18_medium
+  seed: 42
+  output_dir: artifacts/runs/neu_resnet18_medium
+
+dataset:
+  raw_dir: data/raw/neu_steel
+  processed_dir: data/processed
+  manifest_path: data/dataset/neu_steel_medium_manifest.json
+  image_size: 224
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  allowed_extensions:
+    - .bmp
+  max_images_per_class: null
+  train_images_per_class: 100
+
+training:
+  batch_size: 32
+  epochs: 10
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  num_workers: 0
+  pin_memory: false
+  device: cpu
+  optimizer: adamw
+  scheduler: cosine
+  label_smoothing: 0.05
+
+model:
+  name: resnet18
+  dropout: 0.3
+  pretrained: false
+
+synthetic:
+  enabled: false
+  multiplier: 1.0
+  output_dir: data/processed/synthetic_neu_medium
+
+evaluation:
+  checkpoint_path: artifacts/runs/neu_resnet18_medium/best.pt

@@ -1,0 +1,38 @@
+experiment:
+  name: debug_run
+  seed: 7
+  output_dir: artifacts/runs/debug_run
+
+dataset:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  manifest_path: data/dataset/debug_manifest.json
+  image_size: 128
+  train_split: 0.6
+  val_split: 0.2
+  test_split: 0.2
+  allowed_extensions:
+    - .jpg
+    - .jpeg
+    - .png
+  max_images_per_class: 20
+
+training:
+  batch_size: 8
+  epochs: 2
+  learning_rate: 0.001
+  weight_decay: 0.0
+  num_workers: 0
+  device: cpu
+
+model:
+  name: small_cnn
+  dropout: 0.1
+
+synthetic:
+  enabled: true
+  multiplier: 0.5
+  output_dir: data/processed/synthetic_debug
+
+evaluation:
+  checkpoint_path: artifacts/runs/debug_run/best.pt

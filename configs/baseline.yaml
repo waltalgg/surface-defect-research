@@ -1,0 +1,39 @@
+experiment:
+  name: baseline_real_only
+  seed: 42
+  output_dir: artifacts/runs/baseline_real_only
+
+dataset:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  manifest_path: data/dataset/split_manifest.json
+  image_size: 224
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  allowed_extensions:
+    - .jpg
+    - .jpeg
+    - .png
+    - .bmp
+  max_images_per_class: null
+
+training:
+  batch_size: 16
+  epochs: 10
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  num_workers: 0
+  device: cpu
+
+model:
+  name: small_cnn
+  dropout: 0.2
+
+synthetic:
+  enabled: false
+  multiplier: 1.0
+  output_dir: data/processed/synthetic
+
+evaluation:
+  checkpoint_path: artifacts/runs/baseline_real_only/best.pt
