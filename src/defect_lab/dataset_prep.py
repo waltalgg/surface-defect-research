@@ -37,17 +37,22 @@ def prepare_dataset(config: Config) -> None:
     allowed_extensions = {ext.lower() for ext in dataset_cfg["allowed_extensions"]}
     max_images_per_class = dataset_cfg.get("max_images_per_class")
     train_images_per_class = dataset_cfg.get("train_images_per_class")
+    include_classes = set(dataset_cfg.get("include_classes") or [])
+    label_map = dataset_cfg.get("label_map") or {}
 
     if not raw_dir.exists():
         raise FileNotFoundError(f"Raw dataset directory does not exist: {raw_dir}")
 
     set_seed(int(experiment_cfg["seed"]))
     class_to_paths = _list_images(raw_dir, allowed_extensions)
+    if include_classes:
+        class_to_paths = {class_name: paths for class_name, paths in class_to_paths.items() if class_name in include_classes}
     if not class_to_paths:
         raise RuntimeError("No class folders with valid images were found in data/raw.")
 
+    output_classes = sorted({label_map.get(class_name, class_name) for class_name in class_to_paths})
     manifest: dict[str, object] = {
-        "classes": sorted(class_to_paths),
+        "classes": output_classes,
         "splits": {"train": [], "val": [], "test": []},
         "metadata": {
             "seed": experiment_cfg["seed"],
@@ -55,11 +60,14 @@ def prepare_dataset(config: Config) -> None:
             "raw_dir": str(raw_dir.as_posix()),
             "max_images_per_class": max_images_per_class,
             "train_images_per_class": train_images_per_class,
+            "include_classes": sorted(include_classes) if include_classes else None,
+            "label_map": label_map or None,
             "counts_per_split": {},
         },
     }
 
     for class_name, paths in class_to_paths.items():
+        target_label = label_map.get(class_name, class_name)
         sampled = list(paths)
         random.shuffle(sampled)
         if max_images_per_class:
@@ -73,12 +81,11 @@ def prepare_dataset(config: Config) -> None:
         if train_images_per_class is not None:
             split["train"] = split["train"][: int(train_images_per_class)]
 
-        manifest["metadata"]["counts_per_split"][class_name] = {
-            split_name: len(split_items) for split_name, split_items in split.items()
-        }
+        split_counts = {split_name: len(split_items) for split_name, split_items in split.items()}
+        manifest["metadata"]["counts_per_split"][class_name] = {"target_label": target_label, **split_counts}
         for split_name, split_items in split.items():
             for item in split_items:
-                manifest["splits"][split_name].append({"path": item, "label": class_name})
+                manifest["splits"][split_name].append({"path": item, "label": target_label})
 
     ensure_dir(manifest_path.parent)
     write_json(manifest_path, manifest)

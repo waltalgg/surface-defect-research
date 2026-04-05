@@ -35,8 +35,11 @@ def run_evaluation(config: Config) -> None:
 
     report = {
         "checkpoint": str(checkpoint_path),
+        "classes": classes,
         "test_loss": test_loss,
         "metrics": metrics,
+        "config": checkpoint.get("config", {}),
+        "manifest_metadata": checkpoint.get("manifest_metadata", {}),
     }
     report_path = checkpoint_path.parent / "test_metrics.json"
     write_json(report_path, report)

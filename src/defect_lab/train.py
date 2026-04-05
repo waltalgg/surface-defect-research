@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections import Counter
 
 import torch
 
 from .config import Config
-from .data import create_dataloaders
+from .data import create_dataloaders, load_manifest
 from .engine import run_epoch
 from .metrics import classification_metrics
 from .model import build_model
@@ -20,6 +21,7 @@ def run_training(config: Config) -> None:
     set_seed(int(experiment_cfg["seed"]))
     output_dir = ensure_dir(experiment_cfg["output_dir"])
     loaders, classes = create_dataloaders(config)
+    manifest = load_manifest(config["dataset"]["manifest_path"])
 
     device = torch.device(training_cfg["device"])
     model = build_model(
@@ -29,7 +31,20 @@ def run_training(config: Config) -> None:
         pretrained=bool(model_cfg.get("pretrained", False)),
     ).to(device)
 
-    criterion = torch.nn.CrossEntropyLoss(label_smoothing=float(training_cfg.get("label_smoothing", 0.0)))
+    class_weights = None
+    if bool(training_cfg.get("class_weighted_loss", False)):
+        label_counts = Counter(item["label"] for item in manifest["splits"]["train"])
+        total = sum(label_counts.values())
+        class_weights = torch.tensor(
+            [total / (len(classes) * label_counts[class_name]) for class_name in classes],
+            dtype=torch.float32,
+            device=device,
+        )
+
+    criterion = torch.nn.CrossEntropyLoss(
+        weight=class_weights,
+        label_smoothing=float(training_cfg.get("label_smoothing", 0.0)),
+    )
     optimizer_name = str(training_cfg.get("optimizer", "adam")).lower()
     if optimizer_name == "adam":
         optimizer = torch.optim.Adam(
@@ -83,6 +98,7 @@ def run_training(config: Config) -> None:
                     "model_state": model.state_dict(),
                     "classes": classes,
                     "config": config.data,
+                    "manifest_metadata": manifest.get("metadata", {}),
                 },
                 best_path,
             )

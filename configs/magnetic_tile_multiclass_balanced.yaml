@@ -1,0 +1,52 @@
+experiment:
+  name: magnetic_tile_resnet18_multiclass_balanced
+  seed: 42
+  output_dir: artifacts/runs/magnetic_tile_resnet18_multiclass_balanced
+
+dataset:
+  raw_dir: data/raw/magnetic_tile_unpacked/Magnetic-tile-defect-datasets.-master
+  processed_dir: data/processed
+  manifest_path: data/dataset/magnetic_tile_multiclass_balanced_manifest.json
+  image_size: 224
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  allowed_extensions:
+    - .jpg
+  max_images_per_class: null
+  train_images_per_class: null
+  label_map:
+    MT_Blowhole: blowhole
+    MT_Break: break
+    MT_Crack: crack
+    MT_Fray: fray
+    MT_Free: free
+    MT_Uneven: uneven
+
+training:
+  batch_size: 32
+  epochs: 10
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  num_workers: 0
+  pin_memory: false
+  device: cpu
+  optimizer: adamw
+  scheduler: cosine
+  label_smoothing: 0.02
+  balanced_sampling: true
+  class_weighted_loss: true
+
+model:
+  name: resnet18
+  dropout: 0.3
+  pretrained: false
+
+synthetic:
+  enabled: false
+  multiplier: 1.0
+  method: basic
+  output_dir: data/processed/synthetic_magnetic_tile_multiclass_balanced
+
+evaluation:
+  checkpoint_path: artifacts/runs/magnetic_tile_resnet18_multiclass_balanced/best.pt

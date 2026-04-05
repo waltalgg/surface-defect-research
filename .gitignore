@@ -19,9 +19,11 @@ artifacts/plots/
 artifacts/plots_dataset/
 artifacts/plots_synthetic/
 artifacts/cache/
+artifacts/reports/
 data/raw/
 data/processed/
 data/dataset/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/dataset/.gitkeep
+artifacts/sample_pdf_extract.txt
