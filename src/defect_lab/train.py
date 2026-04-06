@@ -109,7 +109,8 @@ def run_training(config: Config) -> None:
         print(
             f"Epoch {epoch:03d} | "
             f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-            f"val_f1={val_metrics['f1']:.4f} "
+            f"train_acc={train_metrics['accuracy']:.4f} train_f1={train_metrics['f1']:.4f} "
+            f"val_acc={val_metrics['accuracy']:.4f} val_f1={val_metrics['f1']:.4f} "
             f"lr={optimizer.param_groups[0]['lr']:.6f}"
         )
 
