@@ -45,7 +45,7 @@ model:
 synthetic:
   enabled: true
   multiplier: 0.5
-  method: basic
+  method: composite
   output_dir: data/processed/synthetic_magnetic_tile_binary_small_half_balanced_gpu
   merged_manifest_path: data/dataset/magnetic_tile_binary_small_synth_half_balanced_gpu_manifest.json
 

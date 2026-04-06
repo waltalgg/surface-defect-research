@@ -52,6 +52,20 @@ python scripts/generate_synthetic.py --config configs/magnetic_tile_binary_small
 streamlit run ui/app.py
 ```
 
+Для генерации графиков и сводок из одной точки входа:
+
+```bash
+python scripts/plot_latest_results.py --all
+```
+
+Можно генерировать и только нужные части:
+
+```bash
+python scripts/plot_latest_results.py --plots train_size synthetic_ratio
+python scripts/plot_latest_results.py --plots synthetic_examples composite_examples
+python scripts/plot_latest_results.py --plots summary
+```
+
 ---
 
 # English version
@@ -102,4 +116,18 @@ To launch the UI:
 
 ```bash
 streamlit run ui/app.py
+```
+
+To generate plots and summaries from a single entry point:
+
+```bash
+python scripts/plot_latest_results.py --all
+```
+
+You can also generate only specific parts:
+
+```bash
+python scripts/plot_latest_results.py --plots train_size synthetic_ratio
+python scripts/plot_latest_results.py --plots synthetic_examples composite_examples
+python scripts/plot_latest_results.py --plots summary
 ```

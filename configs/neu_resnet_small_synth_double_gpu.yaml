@@ -36,7 +36,7 @@ model:
 synthetic:
   enabled: true
   multiplier: 2.0
-  method: basic
+  method: composite
   output_dir: data/processed/synthetic_neu_small_double_gpu
   merged_manifest_path: data/dataset/neu_steel_small_synth_double_gpu_manifest.json
 

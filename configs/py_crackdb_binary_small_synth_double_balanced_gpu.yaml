@@ -41,7 +41,7 @@ model:
 synthetic:
   enabled: true
   multiplier: 2.0
-  method: basic
+  method: composite
   output_dir: data/processed/synthetic_py_crackdb_binary_small_double_balanced_gpu
   merged_manifest_path: data/dataset/py_crackdb_binary_small_synth_double_balanced_gpu_manifest.json
 
