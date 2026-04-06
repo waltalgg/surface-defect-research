@@ -23,6 +23,7 @@ artifacts/plots_synthetic_composite/
 artifacts/mplconfig/
 artifacts/cache/
 artifacts/reports/
+artifacts/ui_jobs/
 data/raw/
 data/processed/
 data/dataset/
