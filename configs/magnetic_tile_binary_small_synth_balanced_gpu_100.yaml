@@ -1,12 +1,12 @@
 experiment:
-  name: magnetic_tile_resnet18_binary_small_balanced
+  name: magnetic_tile_resnet18_binary_small_synth_balanced_gpu_100
   seed: 42
-  output_dir: artifacts/runs/magnetic_tile_resnet18_binary_small_balanced
+  output_dir: artifacts/runs/magnetic_tile_resnet18_binary_small_synth_balanced_gpu_100
 
 dataset:
   raw_dir: data/raw/magnetic_tile_unpacked/Magnetic-tile-defect-datasets.-master
   processed_dir: data/processed
-  manifest_path: data/dataset/magnetic_tile_binary_small_balanced_manifest.json
+  manifest_path: data/dataset/magnetic_tile_binary_small_synth_balanced_gpu_100_manifest.json
   image_size: 224
   train_split: 0.7
   val_split: 0.15
@@ -24,13 +24,13 @@ dataset:
     MT_Uneven: defect
 
 training:
-  batch_size: 32
-  epochs: 10
+  batch_size: 64
+  epochs: 100
   learning_rate: 0.0003
   weight_decay: 0.0001
   num_workers: 0
-  pin_memory: false
-  device: cpu
+  pin_memory: true
+  device: cuda
   optimizer: adamw
   scheduler: cosine
   label_smoothing: 0.02
@@ -43,10 +43,11 @@ model:
   pretrained: false
 
 synthetic:
-  enabled: false
+  enabled: true
   multiplier: 1.0
   method: basic
-  output_dir: data/processed/synthetic_magnetic_tile_binary_small_balanced
+  output_dir: data/processed/synthetic_magnetic_tile_binary_small_balanced_gpu_100
+  merged_manifest_path: data/dataset/magnetic_tile_binary_small_synth_balanced_gpu_100_manifest.json
 
 evaluation:
-  checkpoint_path: artifacts/runs/magnetic_tile_resnet18_binary_small_balanced/best.pt
+  checkpoint_path: artifacts/runs/magnetic_tile_resnet18_binary_small_synth_balanced_gpu_100/best.pt

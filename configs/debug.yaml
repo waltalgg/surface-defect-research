@@ -1,38 +1,54 @@
+# experiment: отдельный сверхбыстрый режим для проверки, что пайплайн вообще запускается.
 experiment:
-  name: debug_run
-  seed: 7
-  output_dir: artifacts/runs/debug_run
+  name: debug_example  # name: имя debug-эксперимента; лучше явно помечать как debug.
+  seed: 42  # seed: зерно случайности; можно оставить 42 для всех быстрых тестов.
+  output_dir: artifacts/runs/debug_example  # output_dir: папка под быстрые debug-артефакты.
 
+# dataset: минимальные настройки, чтобы прогон был коротким.
 dataset:
-  raw_dir: data/raw
-  processed_dir: data/processed
-  manifest_path: data/dataset/debug_manifest.json
-  image_size: 128
-  train_split: 0.6
-  val_split: 0.2
-  test_split: 0.2
-  allowed_extensions:
-    - .jpg
-    - .jpeg
-    - .png
-  max_images_per_class: 20
+  raw_dir: data/raw/neu_steel  # raw_dir: какой датасет использовать для smoke test; можно поменять на magnetic_tile при необходимости.
+  processed_dir: data/processed  # processed_dir: папка промежуточных данных.
+  manifest_path: data/dataset/debug_example_manifest.json  # manifest_path: куда сохранить debug-manifest.
+  image_size: 160  # image_size: уменьшенный размер для быстрого теста; частые debug-значения 128 или 160.
+  train_split: 0.7  # train_split: доля train.
+  val_split: 0.15  # val_split: доля validation.
+  test_split: 0.15  # test_split: доля test.
+  allowed_extensions:  # allowed_extensions: какие расширения искать.
+    - .bmp  # allowed_extensions item: для NEU это .bmp; для JPG-датасета нужно заменить на .jpg.
+  max_images_per_class: 80  # max_images_per_class: жестко ограничивает число изображений на класс до split; полезно для быстрого smoke test.
+  train_images_per_class: 8  # train_images_per_class: маленький train subset для fast debug; типичные debug-значения 4, 8, 16.
+  include_classes: null  # include_classes: можно сузить до 2-3 классов для очень быстрого прогона; null = брать все.
+  label_map: null  # label_map: можно включить для быстрого бинарного сценария; null = без ремаппинга.
 
+# training: экстремально короткие параметры для проверки цикла обучения.
 training:
-  batch_size: 8
-  epochs: 2
-  learning_rate: 0.001
-  weight_decay: 0.0
-  num_workers: 0
-  device: cpu
+  batch_size: 16  # batch_size: маленький батч, чтобы debug запускался даже на слабой машине.
+  epochs: 2  # epochs: минимальное число эпох; обычно 1-3 для smoke test.
+  learning_rate: 0.0003  # learning_rate: оставляем близким к реальному, чтобы увидеть адекватные числа.
+  weight_decay: 0.0001  # weight_decay: стандартная регуляризация.
+  num_workers: 0  # num_workers: на Windows safest вариант = 0.
+  pin_memory: false  # pin_memory: для debug на cpu обычно false; если device=cuda, можно поставить true.
+  device: cpu  # device: для максимально предсказуемого debug ставим cpu; можно заменить на cuda, если нужен GPU smoke test.
+  optimizer: adamw  # optimizer: adamw или adam.
+  scheduler: cosine  # scheduler: none или cosine; можно оставить cosine для совместимости с основными конфигами.
+  label_smoothing: 0.0  # label_smoothing: в debug часто удобно 0.0, чтобы меньше факторов мешало.
+  balanced_sampling: false  # balanced_sampling: в debug обычно false, если только специально не тестируется imbalance-логика.
+  class_weighted_loss: false  # class_weighted_loss: в debug обычно false.
 
+# model: можно брать более легкую модель, чтобы прогон был почти мгновенным.
 model:
-  name: small_cnn
-  dropout: 0.1
+  name: small_cnn  # name: для быстрого debug удобны small_cnn или defect_cnn; для полного smoke test можно оставить resnet18.
+  dropout: 0.2  # dropout: типичное debug-значение 0.1-0.3.
+  pretrained: false  # pretrained: в debug чаще false, чтобы не тянуть лишние веса и не путать поведение.
 
+# synthetic: отдельный быстрый debug-режим для пайплайна генерации.
 synthetic:
-  enabled: true
-  multiplier: 0.5
-  output_dir: data/processed/synthetic_debug
+  enabled: false  # enabled: false для обычного smoke test; true если нужно проверить generate_synthetic.py.
+  multiplier: 0.5  # multiplier: для debug синтетики лучше маленькое значение 0.25 или 0.5.
+  method: basic  # method: basic, strong или blend; для smoke test лучше basic.
+  output_dir: data/processed/synthetic_debug_example  # output_dir: куда складывать debug-синтетику.
+  merged_manifest_path: data/dataset/debug_example_synth_manifest.json  # merged_manifest_path: путь для объединенного manifest; можно оставить даже если enabled=false.
 
+# evaluation: путь к checkpoint, который создаст debug-run.
 evaluation:
-  checkpoint_path: artifacts/runs/debug_run/best.pt
+  checkpoint_path: artifacts/runs/debug_example/best.pt  # checkpoint_path: обычно artifacts/runs/<name>/best.pt.

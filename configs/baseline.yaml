@@ -1,39 +1,54 @@
+# experiment: блок общих настроек конкретного запуска.
 experiment:
-  name: baseline_real_only
-  seed: 42
-  output_dir: artifacts/runs/baseline_real_only
+  name: baseline_example  # name: имя эксперимента; может быть любая строка без пробелов или с ними, но лучше использовать snake_case.
+  seed: 42  # seed: зерно случайности для воспроизводимости; типично 7, 21, 42, 99, 123.
+  output_dir: artifacts/runs/baseline_example  # output_dir: папка, куда сохраняются checkpoint, history.json и test_metrics.json.
 
+# dataset: настройки исходных данных и разбиения на train/val/test.
 dataset:
-  raw_dir: data/raw
-  processed_dir: data/processed
-  manifest_path: data/dataset/split_manifest.json
-  image_size: 224
-  train_split: 0.7
-  val_split: 0.15
-  test_split: 0.15
-  allowed_extensions:
-    - .jpg
-    - .jpeg
-    - .png
-    - .bmp
-  max_images_per_class: null
+  raw_dir: data/raw/neu_steel  # raw_dir: путь к корню датасета; обычно data/raw/neu_steel или data/raw/magnetic_tile_unpacked/...
+  processed_dir: data/processed  # processed_dir: папка для синтетики и промежуточных данных; обычно data/processed.
+  manifest_path: data/dataset/baseline_example_manifest.json  # manifest_path: путь, где будет сохранен manifest со split-ами.
+  image_size: 224  # image_size: итоговый размер изображения после preprocess; частые значения 128, 160, 224, 256.
+  train_split: 0.7  # train_split: доля train-части; обычно 0.6-0.8.
+  val_split: 0.15  # val_split: доля validation-части; обычно 0.1-0.2.
+  test_split: 0.15  # test_split: доля test-части; обычно 0.1-0.2; должна вместе с train_split и val_split давать 1.0.
+  allowed_extensions:  # allowed_extensions: допустимые расширения файлов в датасете.
+    - .bmp  # allowed_extensions item: пример для NEU; для других наборов можно использовать .jpg, .jpeg, .png.
+  max_images_per_class: null  # max_images_per_class: максимум изображений на класс до split; null = без ограничения, либо число вроде 100, 300, 1000.
+  train_images_per_class: 40  # train_images_per_class: ограничение только для train-части; null = full regime, иначе small/medium сценарии.
+  include_classes: null  # include_classes: список классов, которые нужно оставить; null = использовать все, либо ['MT_Free', 'MT_Crack'].
+  label_map: null  # label_map: словарь ремаппинга меток; null = без ремаппинга, либо {'MT_Free': 'no_defect', 'MT_Crack': 'defect'}.
 
+# training: все параметры обучения модели.
 training:
-  batch_size: 16
-  epochs: 10
-  learning_rate: 0.001
-  weight_decay: 0.0001
-  num_workers: 0
-  device: cpu
+  batch_size: 64  # batch_size: размер мини-батча; частые значения 16, 32, 64, 128; зависит от памяти GPU.
+  epochs: 100  # epochs: число эпох обучения; для финальных сравнений у нас сейчас используется 100.
+  learning_rate: 0.0003  # learning_rate: шаг оптимизации; типичные значения 0.001, 0.0003, 0.0001.
+  weight_decay: 0.0001  # weight_decay: L2-регуляризация; типично 0.0, 1e-4, 5e-4.
+  num_workers: 0  # num_workers: число воркеров DataLoader; на Windows безопасно 0, иногда можно 2 или 4.
+  pin_memory: true  # pin_memory: ускоряет передачу данных на GPU; true для cuda, false для cpu.
+  device: cuda  # device: устройство обучения; допустимые значения cpu или cuda.
+  optimizer: adamw  # optimizer: оптимизатор; в проекте сейчас поддерживаются adam и adamw.
+  scheduler: cosine  # scheduler: планировщик learning rate; сейчас поддерживаются none и cosine.
+  label_smoothing: 0.05  # label_smoothing: сглаживание меток; типично 0.0, 0.02, 0.05.
+  balanced_sampling: false  # balanced_sampling: использовать ли WeightedRandomSampler; true особенно полезно для несбалансированных датасетов.
+  class_weighted_loss: false  # class_weighted_loss: использовать ли веса классов в loss; true полезно для binary/imbalanced сценариев.
 
+# model: выбор архитектуры и ее параметров.
 model:
-  name: small_cnn
-  dropout: 0.2
+  name: resnet18  # name: имя модели; сейчас поддерживаются small_cnn, defect_cnn, resnet18.
+  dropout: 0.3  # dropout: dropout перед классификатором; частые значения 0.1, 0.2, 0.3, 0.5.
+  pretrained: false  # pretrained: использовать ли pretrained-веса torchvision; допустимые значения true или false.
 
+# synthetic: параметры генерации синтетических данных.
 synthetic:
-  enabled: false
-  multiplier: 1.0
-  output_dir: data/processed/synthetic
+  enabled: false  # enabled: включать ли генерацию синтетики; true для real+synthetic, false для real only.
+  multiplier: 1.0  # multiplier: сколько синтетических примеров генерировать относительно train; типично 0.5, 1.0, 2.0.
+  method: basic  # method: способ генерации; сейчас поддерживаются basic, strong, blend.
+  output_dir: data/processed/synthetic_baseline_example  # output_dir: папка, куда будут записаны synthetic images.
+  merged_manifest_path: null  # merged_manifest_path: manifest для real+synthetic; null если synthetic disabled, иначе путь к .json.
 
+# evaluation: настройки финальной оценки на test.
 evaluation:
-  checkpoint_path: artifacts/runs/baseline_real_only/best.pt
+  checkpoint_path: artifacts/runs/baseline_example/best.pt  # checkpoint_path: путь к лучшему checkpoint; обычно совпадает с output_dir/best.pt.

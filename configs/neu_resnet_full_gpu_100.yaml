@@ -1,12 +1,12 @@
 experiment:
-  name: neu_resnet18_medium
+  name: neu_resnet18_full_gpu_100
   seed: 42
-  output_dir: artifacts/runs/neu_resnet18_medium
+  output_dir: artifacts/runs/neu_resnet18_full_gpu_100
 
 dataset:
   raw_dir: data/raw/neu_steel
   processed_dir: data/processed
-  manifest_path: data/dataset/neu_steel_medium_manifest.json
+  manifest_path: data/dataset/neu_steel_full_gpu_100_manifest.json
   image_size: 224
   train_split: 0.7
   val_split: 0.15
@@ -14,16 +14,16 @@ dataset:
   allowed_extensions:
     - .bmp
   max_images_per_class: null
-  train_images_per_class: 100
+  train_images_per_class: 201
 
 training:
-  batch_size: 32
-  epochs: 10
+  batch_size: 64
+  epochs: 100
   learning_rate: 0.0003
   weight_decay: 0.0001
   num_workers: 0
-  pin_memory: false
-  device: cpu
+  pin_memory: true
+  device: cuda
   optimizer: adamw
   scheduler: cosine
   label_smoothing: 0.05
@@ -36,7 +36,8 @@ model:
 synthetic:
   enabled: false
   multiplier: 1.0
-  output_dir: data/processed/synthetic_neu_medium
+  method: basic
+  output_dir: data/processed/synthetic_neu_full_gpu_100
 
 evaluation:
-  checkpoint_path: artifacts/runs/neu_resnet18_medium/best.pt
+  checkpoint_path: artifacts/runs/neu_resnet18_full_gpu_100/best.pt

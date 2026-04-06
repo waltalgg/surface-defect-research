@@ -16,8 +16,10 @@ Thumbs.db
 .vscode/
 artifacts/runs/
 artifacts/plots/
+artifacts/plots_compare/
 artifacts/plots_dataset/
 artifacts/plots_synthetic/
+artifacts/mplconfig/
 artifacts/cache/
 artifacts/reports/
 data/raw/
