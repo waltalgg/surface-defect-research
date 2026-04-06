@@ -1,12 +1,12 @@
 experiment:
-  name: py_crackdb_resnet18_binary_medium_balanced_gpu_100
+  name: py_crackdb_resnet18_binary_medium_balanced_gpu
   seed: 42
-  output_dir: artifacts/runs/py_crackdb_resnet18_binary_medium_balanced_gpu_100
+  output_dir: artifacts/runs/py_crackdb_resnet18_binary_medium_balanced_gpu
 
 dataset:
   raw_dir: data/raw/py_crackdb/Classification
   processed_dir: data/processed
-  manifest_path: data/dataset/py_crackdb_binary_medium_balanced_gpu_100_manifest.json
+  manifest_path: data/dataset/py_crackdb_binary_medium_balanced_gpu_manifest.json
   image_size: 224
   train_split: 0.7
   val_split: 0.15
@@ -42,7 +42,7 @@ synthetic:
   enabled: false
   multiplier: 1.0
   method: basic
-  output_dir: data/processed/synthetic_py_crackdb_binary_medium_balanced_gpu_100
+  output_dir: data/processed/synthetic_py_crackdb_binary_medium_balanced_gpu
 
 evaluation:
-  checkpoint_path: artifacts/runs/py_crackdb_resnet18_binary_medium_balanced_gpu_100/best.pt
+  checkpoint_path: artifacts/runs/py_crackdb_resnet18_binary_medium_balanced_gpu/best.pt

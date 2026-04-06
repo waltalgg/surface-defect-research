@@ -1,12 +1,12 @@
 experiment:
-  name: neu_resnet18_full_gpu_100
+  name: neu_resnet18_full_gpu
   seed: 42
-  output_dir: artifacts/runs/neu_resnet18_full_gpu_100
+  output_dir: artifacts/runs/neu_resnet18_full_gpu
 
 dataset:
   raw_dir: data/raw/neu_steel
   processed_dir: data/processed
-  manifest_path: data/dataset/neu_steel_full_gpu_100_manifest.json
+  manifest_path: data/dataset/neu_steel_full_gpu_manifest.json
   image_size: 224
   train_split: 0.7
   val_split: 0.15
@@ -37,7 +37,7 @@ synthetic:
   enabled: false
   multiplier: 1.0
   method: basic
-  output_dir: data/processed/synthetic_neu_full_gpu_100
+  output_dir: data/processed/synthetic_neu_full_gpu
 
 evaluation:
-  checkpoint_path: artifacts/runs/neu_resnet18_full_gpu_100/best.pt
+  checkpoint_path: artifacts/runs/neu_resnet18_full_gpu/best.pt
