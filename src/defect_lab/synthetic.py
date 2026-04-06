@@ -5,7 +5,7 @@ import random
 from collections import defaultdict
 from pathlib import Path
 
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps, ImageStat
 
 from .config import Config
 from .data import load_manifest
@@ -76,6 +76,142 @@ def _blend_same_class_images(image: Image.Image, partner: Image.Image) -> Image.
     return merged
 
 
+def _estimate_defect_mask(image: Image.Image) -> Image.Image:
+    gray = image.convert("L")
+    blurred = gray.filter(ImageFilter.GaussianBlur(radius=random.uniform(5.0, 9.0)))
+    difference = ImageChops.difference(gray, blurred)
+    edges = gray.filter(ImageFilter.FIND_EDGES)
+    combined = ImageChops.add(difference, edges, scale=1.2)
+    threshold = random.randint(18, 34)
+    mask = combined.point(lambda px: 255 if px > threshold else 0, mode="L")
+    mask = mask.filter(ImageFilter.MinFilter(size=3))
+    mask = mask.filter(ImageFilter.MaxFilter(size=5))
+    mask = mask.filter(ImageFilter.MaxFilter(size=5))
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=random.uniform(1.2, 2.4)))
+    return mask.point(lambda px: min(255, int(px * 1.25)))
+
+
+def _match_patch_to_background(patch: Image.Image, background_crop: Image.Image) -> Image.Image:
+    patch_stats = ImageStat.Stat(patch.convert("L"))
+    bg_stats = ImageStat.Stat(background_crop.convert("L"))
+    patch_mean = patch_stats.mean[0] if patch_stats.mean else 128.0
+    bg_mean = bg_stats.mean[0] if bg_stats.mean else 128.0
+    patch_std = patch_stats.stddev[0] if patch_stats.stddev else 20.0
+    bg_std = bg_stats.stddev[0] if bg_stats.stddev else 20.0
+
+    brightness_ratio = max(0.75, min(1.25, bg_mean / max(1.0, patch_mean)))
+    contrast_ratio = max(0.8, min(1.35, bg_std / max(1.0, patch_std)))
+
+    patch = ImageEnhance.Brightness(patch).enhance(brightness_ratio)
+    patch = ImageEnhance.Contrast(patch).enhance(contrast_ratio)
+    return patch
+
+
+def _random_crop_box(width: int, height: int) -> tuple[int, int, int, int]:
+    crop_scale = random.uniform(0.35, 0.7)
+    crop_width = max(24, int(width * crop_scale))
+    crop_height = max(24, int(height * crop_scale))
+    offset_x = random.randint(0, max(0, width - crop_width))
+    offset_y = random.randint(0, max(0, height - crop_height))
+    return offset_x, offset_y, offset_x + crop_width, offset_y + crop_height
+
+
+def _extract_patch_with_mask(image: Image.Image, mask: Image.Image) -> tuple[Image.Image, Image.Image]:
+    bbox = mask.getbbox()
+    width, height = image.size
+    if bbox is None:
+        bbox = _random_crop_box(width, height)
+
+    left, top, right, bottom = bbox
+    pad_x = max(8, int((right - left) * random.uniform(0.12, 0.25)))
+    pad_y = max(8, int((bottom - top) * random.uniform(0.12, 0.25)))
+    crop_box = (
+        max(0, left - pad_x),
+        max(0, top - pad_y),
+        min(width, right + pad_x),
+        min(height, bottom + pad_y),
+    )
+    return image.crop(crop_box), mask.crop(crop_box)
+
+
+def _deform_patch(patch: Image.Image, patch_mask: Image.Image) -> tuple[Image.Image, Image.Image]:
+    angle = random.uniform(-20, 20)
+    patch = patch.rotate(angle, resample=Image.Resampling.BILINEAR, expand=True)
+    patch_mask = patch_mask.rotate(angle, resample=Image.Resampling.BILINEAR, expand=True)
+
+    scale_x = random.uniform(0.7, 1.25)
+    scale_y = random.uniform(0.7, 1.25)
+    new_width = max(20, int(patch.width * scale_x))
+    new_height = max(20, int(patch.height * scale_y))
+    patch = patch.resize((new_width, new_height), resample=Image.Resampling.BILINEAR)
+    patch_mask = patch_mask.resize((new_width, new_height), resample=Image.Resampling.BILINEAR)
+
+    if random.random() > 0.5:
+        patch = patch.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        patch_mask = patch_mask.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+
+    if random.random() > 0.4:
+        shear = random.uniform(-0.22, 0.22)
+        patch = patch.transform(
+            patch.size,
+            Image.Transform.AFFINE,
+            (1, shear, 0, 0, 1, 0),
+            resample=Image.Resampling.BILINEAR,
+        )
+        patch_mask = patch_mask.transform(
+            patch_mask.size,
+            Image.Transform.AFFINE,
+            (1, shear, 0, 0, 1, 0),
+            resample=Image.Resampling.BILINEAR,
+        )
+
+    patch = ImageEnhance.Contrast(patch).enhance(random.uniform(0.9, 1.25))
+    patch = ImageEnhance.Brightness(patch).enhance(random.uniform(0.9, 1.12))
+    patch = ImageEnhance.Sharpness(patch).enhance(random.uniform(0.9, 1.3))
+    patch_mask = patch_mask.filter(ImageFilter.GaussianBlur(radius=random.uniform(1.0, 2.5)))
+    return patch, patch_mask
+
+
+def _paste_patch_on_background(background: Image.Image, patch: Image.Image, patch_mask: Image.Image) -> Image.Image:
+    canvas = background.copy()
+    max_x = max(0, canvas.width - patch.width)
+    max_y = max(0, canvas.height - patch.height)
+    offset_x = random.randint(0, max_x)
+    offset_y = random.randint(0, max_y)
+    bg_crop = canvas.crop((offset_x, offset_y, offset_x + patch.width, offset_y + patch.height))
+    patch = _match_patch_to_background(patch, bg_crop)
+    patch_mask = ImageEnhance.Contrast(patch_mask).enhance(random.uniform(1.1, 1.5))
+    patch_mask = patch_mask.filter(ImageFilter.GaussianBlur(radius=random.uniform(1.5, 3.5)))
+    canvas.paste(patch, (offset_x, offset_y), patch_mask)
+    if random.random() > 0.5:
+        canvas = canvas.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.0, 0.8)))
+    if random.random() > 0.6:
+        canvas = ImageEnhance.Sharpness(canvas).enhance(random.uniform(0.95, 1.15))
+    return canvas
+
+
+def _choose_background_label(class_pools: dict[str, list[dict[str, str]]], label: str) -> str:
+    if label != "no_defect" and "no_defect" in class_pools:
+        return "no_defect"
+    return label
+
+
+def _composite_defect_images(
+    image: Image.Image,
+    partner: Image.Image,
+    label: str,
+) -> Image.Image:
+    source = _strong_augment_image(image)
+    background = _strong_augment_image(partner).resize(source.size, resample=Image.Resampling.BILINEAR)
+    if label == "no_defect":
+        return _blend_same_class_images(source, background)
+
+    mask = _estimate_defect_mask(source)
+    patch, patch_mask = _extract_patch_with_mask(source, mask)
+    patch, patch_mask = _deform_patch(patch, patch_mask)
+    return _paste_patch_on_background(background, patch, patch_mask)
+
+
 def _build_class_pools(train_items: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
     pools: dict[str, list[dict[str, str]]] = defaultdict(list)
     for item in train_items:
@@ -123,6 +259,12 @@ def generate_synthetic_dataset(config: Config) -> None:
                 source_paths.append(partner_item["path"])
                 with Image.open(partner_item["path"]).convert("RGB") as partner_image:
                     synthetic = _blend_same_class_images(image, partner_image)
+            elif method == "composite":
+                background_label = _choose_background_label(class_pools, item["label"])
+                partner_item = random.choice(class_pools[background_label])
+                source_paths.append(partner_item["path"])
+                with Image.open(partner_item["path"]).convert("RGB") as partner_image:
+                    synthetic = _composite_defect_images(image, partner_image, item["label"])
             else:
                 raise ValueError(f"Unsupported synthetic method: {method}")
             synthetic.save(target_path)
