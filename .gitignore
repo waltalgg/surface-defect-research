@@ -19,6 +19,7 @@ artifacts/plots/
 artifacts/plots_compare/
 artifacts/plots_dataset/
 artifacts/plots_synthetic/
+artifacts/plots_synthetic_composite/
 artifacts/mplconfig/
 artifacts/cache/
 artifacts/reports/

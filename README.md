@@ -6,188 +6,51 @@
 
 ## Surface Defect Research Pipeline
 
-Этот репозиторий содержит воспроизводимый исследовательский пайплайн компьютерного зрения для распознавания поверхностных дефектов на малых выборках. Текущий фокус проекта:
+Этот репозиторий содержит исследовательский пайплайн компьютерного зрения для анализа поверхностных дефектов на малых выборках. Цель проекта — изучить, как меняется качество модели при ограниченном количестве реальных данных и насколько полезно синтетическое расширение обучающей выборки.
 
-1. как меняется качество модели при уменьшении количества реальных обучающих изображений;
-2. помогает ли синтетическое расширение выборки компенсировать дефицит real data.
+## Что уже сделано
 
-Сейчас проект уже включает полный цикл подготовки данных, обучения, оценки, синтетической генерации, repeated-run экспериментов и визуальной аналитики.
+- собран единый пайплайн подготовки данных, обучения, оценки и генерации синтетики;
+- поддерживаются режимы `small`, `medium`, `full`;
+- реализованы baseline-эксперименты на `ResNet18`;
+- поддерживаются binary- и multiclass-сценарии;
+- добавлены инструменты для таблиц, графиков и галерей `real vs synthetic`;
+- добавлен локальный UI для запуска этапов пайплайна и просмотра логов.
 
-## Что уже реализовано
+## Датасеты
 
-- подготовка датасета и создание manifest-файлов;
-- сбалансированные `train/val/test` splits;
-- low-data режимы `small`, `medium`, `full`;
-- baseline- и improved-модели для multiclass classification;
-- synthetic generation на основе controlled augmentation;
-- сравнение `real only` и `real + synthetic`;
-- repeated runs по нескольким `seed`;
-- графики по результатам, датасету и сравнению real-vs-synthetic.
+В проекте сейчас используются:
 
-## Датасет
+- `NEU Steel Surface Defect Dataset` — многоклассовый набор дефектов металлической поверхности;
+- `Magnetic Tile Surface Defects` — компактный industrial dataset для multiclass и binary-экспериментов;
+- `PY-CrackDB` — дорожный датасет трещин, подготовленный для следующего этапа экспериментов.
 
-Текущие эксперименты выполняются на NEU steel surface defect dataset.
+## Как устроена синтетика
 
-Классы:
+В проекте реализованы несколько режимов генерации:
 
-- `Crazing`
-- `Inclusion`
-- `Patches`
-- `Pitted`
-- `Rolled`
-- `Scratches`
+- `basic` — базовые геометрические и фотометрические преобразования;
+- `strong` — более агрессивные crop/resize и искажения;
+- `blend` — смешивание изображений одного класса на уровне локальных патчей;
+- `composite` — перенос и деформация предполагаемой дефектной области на новый фон.
 
-Статистика:
+Текущий `composite`-подход использует оценку маски дефекта, извлечение patch, его деформацию и вставку в другой контекст с адаптацией под локальный фон.
 
-- всего изображений: `1728`
-- классов: `6`
-- изображений на класс: `288`
-- размер: `200x200`
-- формат: `.bmp`
-
-Сплиты:
-
-- full train: `1206`
-- validation: `258`
-- test: `264`
-
-Low-data режимы:
-
-- `small`: `40` train-изображений на класс
-- `medium`: `100` train-изображений на класс
-- `full`: `201` train-изображение на класс
-
-Во всех режимах `val` и `test` фиксированы, меняется только train subset.
-
-## Технологии
-
-- Python `3.13`
-- PyTorch `2.11`
-- Torchvision `0.26`
-- Pillow
-- PyYAML
-- Matplotlib
-
-Структура проекта:
-
-- YAML-конфиги для экспериментов;
-- модульная логика в `src/defect_lab`;
-- отдельные скрипты для подготовки, обучения, оценки, генерации и визуализации;
-- JSON-артефакты для метрик, историй обучения и repeated-run summary.
-
-## Модель и обучение
-
-Начальный baseline был построен на небольшой custom CNN:
-
-- три сверточных блока;
-- max pooling;
-- adaptive average pooling;
-- dropout перед классификатором.
-
-Текущий основной baseline построен на `ResNet18`:
-
-- backbone: `resnet18`
-- classifier head: dropout + linear layer
-- loss: cross-entropy с label smoothing
-- optimizer: `AdamW`
-- scheduler: cosine annealing
-
-Train-time preprocessing:
-
-- random resized crop;
-- horizontal flip;
-- rotation;
-- brightness/contrast jitter;
-- ImageNet-style normalization.
-
-## Synthetic pipeline
-
-Текущая синтетическая ветка реализована как controlled augmentation:
-
-- flips;
-- небольшие повороты;
-- Gaussian blur;
-- изменение контраста.
-
-Synthetic pipeline умеет:
-
-- генерировать class-balanced synthetic images из train split;
-- сохранять их в `data/processed/...`;
-- собирать merged manifest с real + synthetic training samples;
-- оставлять validation и test неизменными.
-
-## Результаты
-
-Начальная small CNN:
-
-- accuracy: `0.6212`
-- F1-score: `0.6158`
-
-Улучшенный `ResNet18` baseline:
-
-- accuracy: `0.9470`
-- precision: `0.9496`
-- recall: `0.9470`
-- F1-score: `0.9471`
-
-Результаты по train-size режимам:
-
-- `small`: accuracy `0.9015`, F1 `0.9020`
-- `medium`: accuracy `0.9280`, F1 `0.9271`
-- `full`: accuracy `0.9470`, F1 `0.9471`
-
-Результаты по synthetic ratios в `small`-режиме:
-
-- `small real only`: accuracy `0.9015`, F1 `0.9020`
-- `small + 0.5x synthetic`: accuracy `0.9205`, F1 `0.9186`
-- `small + 1.0x synthetic`: accuracy `0.9129`, F1 `0.9111`
-- `small + 2.0x synthetic`: accuracy `0.9508`, F1 `0.9498`
-
-Repeated runs по `seed = 7, 42, 99`:
-
-- `small real only`: mean accuracy `0.9003`, mean F1 `0.8998`
-- `small + 2.0x synthetic`: mean accuracy `0.9508`, mean F1 `0.9505`
-
-## Визуализация
-
-Уже доступны три группы графиков:
-
-- `artifacts/plots` — графики по обучению и метрикам;
-- `artifacts/plots_dataset` — графики по самому датасету;
-- `artifacts/plots_synthetic` — сравнения real vs synthetic.
-
-## Основные скрипты
-
-- `scripts/prepare_dataset.py`
-- `scripts/train.py`
-- `scripts/evaluate.py`
-- `scripts/generate_synthetic.py`
-- `scripts/repeat_experiment.py`
-- `scripts/plot_results.py`
-- `scripts/plot_dataset_analysis.py`
-- `scripts/plot_synthetic_comparison.py`
-
-## Быстрый старт
+## Быстрый запуск
 
 ```bash
 pip install -e .
-python scripts/prepare_dataset.py --config configs/neu_resnet_full.yaml
-python scripts/train.py --config configs/neu_resnet_full.yaml
-python scripts/evaluate.py --config configs/neu_resnet_full.yaml
-python scripts/generate_synthetic.py --config configs/neu_resnet_small_synth_double.yaml
-python scripts/repeat_experiment.py --config configs/neu_resnet_small_synth_double.yaml --seeds 7 42 99
-python scripts/plot_results.py
-python scripts/plot_dataset_analysis.py
-python scripts/plot_synthetic_comparison.py
+python scripts/prepare_dataset.py --config configs/neu_resnet_small_gpu.yaml
+python scripts/train.py --config configs/neu_resnet_small_gpu.yaml
+python scripts/evaluate.py --config configs/neu_resnet_small_gpu.yaml
+python scripts/generate_synthetic.py --config configs/magnetic_tile_binary_small_synth_composite_gpu.yaml
 ```
 
-## Дальнейшее развитие
+Для запуска UI:
 
-- заменить controlled synthetic generator на более сильную генеративную модель;
-- проверить pipeline на другом публичном defect dataset;
-- сравнить multiclass classification и binary defect detection;
-- добавить CSV-экспорт результатов и publication-ready таблицы;
-- расширить repeated-run эксперименты на большее число `seed`.
+```bash
+streamlit run ui/app.py
+```
 
 ---
 
@@ -195,185 +58,48 @@ python scripts/plot_synthetic_comparison.py
 
 ## Surface Defect Research Pipeline
 
-This repository contains a reproducible computer vision research pipeline for surface defect recognition on small datasets. The current project focuses on:
-
-1. how model quality changes when the amount of real training data is reduced;
-2. whether synthetic data can compensate for the lack of real images.
-
-At this stage the repository already includes a full workflow for dataset preparation, training, evaluation, synthetic generation, repeated runs, and visual analytics.
+This repository contains a computer vision research pipeline for surface defect analysis in low-data regimes. The main goal is to study how model quality changes when only a limited amount of real data is available and whether synthetic data can improve training under these conditions.
 
 ## What is already implemented
 
-- dataset preparation and manifest generation;
-- balanced `train/val/test` splits;
-- low-data regimes: `small`, `medium`, `full`;
-- baseline and improved models for multiclass classification;
-- synthetic generation via controlled augmentation;
-- `real only` versus `real + synthetic` comparisons;
-- repeated runs across multiple random seeds;
-- plots for training behavior, dataset analysis, and real-vs-synthetic comparison.
+- a unified workflow for dataset preparation, training, evaluation, and synthetic generation;
+- `small`, `medium`, and `full` training regimes;
+- baseline experiments based on `ResNet18`;
+- binary and multiclass setups depending on the dataset;
+- tools for summary tables, plots, and `real vs synthetic` galleries;
+- a lightweight local UI for running pipeline stages and monitoring logs.
 
-## Dataset
+## Datasets
 
-Current experiments use the NEU steel surface defect dataset.
+The project currently uses:
 
-Classes:
+- `NEU Steel Surface Defect Dataset` for multiclass metal surface defect recognition;
+- `Magnetic Tile Surface Defects` as a compact industrial dataset for multiclass and binary experiments;
+- `PY-CrackDB` as a road crack dataset prepared for the next experimental stage.
 
-- `Crazing`
-- `Inclusion`
-- `Patches`
-- `Pitted`
-- `Rolled`
-- `Scratches`
+## Synthetic data pipeline
 
-Statistics:
+Several synthetic generation modes are available:
 
-- total images: `1728`
-- classes: `6`
-- images per class: `288`
-- image size: `200x200`
-- format: `.bmp`
+- `basic` — simple geometric and photometric transforms;
+- `strong` — stronger crop/resize and perturbation strategy;
+- `blend` — same-class local patch mixing;
+- `composite` — defect-region transfer and deformation on a new background.
 
-Splits:
-
-- full train: `1206`
-- validation: `258`
-- test: `264`
-
-Low-data regimes:
-
-- `small`: `40` train images per class
-- `medium`: `100` train images per class
-- `full`: `201` train images per class
-
-Validation and test remain fixed across regimes; only the training subset changes.
-
-## Technologies
-
-- Python `3.13`
-- PyTorch `2.11`
-- Torchvision `0.26`
-- Pillow
-- PyYAML
-- Matplotlib
-
-Project style:
-
-- YAML-based experiment configuration;
-- modular code in `src/defect_lab`;
-- dedicated scripts for data preparation, training, evaluation, generation, and plotting;
-- JSON artifacts for metrics, histories, and repeated-run summaries.
-
-## Model and training
-
-The initial baseline used a small custom CNN:
-
-- three convolutional blocks;
-- max pooling;
-- adaptive average pooling;
-- dropout before the classifier.
-
-The current main baseline uses `ResNet18`:
-
-- backbone: `resnet18`
-- classifier head: dropout + linear layer
-- loss: cross-entropy with label smoothing
-- optimizer: `AdamW`
-- scheduler: cosine annealing
-
-Train-time preprocessing:
-
-- random resized crop;
-- horizontal flip;
-- rotation;
-- brightness/contrast jitter;
-- ImageNet-style normalization.
-
-## Synthetic pipeline
-
-The current synthetic branch is implemented as controlled augmentation:
-
-- flips;
-- small rotations;
-- Gaussian blur;
-- contrast modification.
-
-The synthetic pipeline can:
-
-- generate class-balanced synthetic images from the train split;
-- save them into `data/processed/...`;
-- create a merged manifest with real + synthetic training samples;
-- keep validation and test unchanged.
-
-## Results
-
-Initial small CNN:
-
-- accuracy: `0.6212`
-- F1-score: `0.6158`
-
-Improved `ResNet18` baseline:
-
-- accuracy: `0.9470`
-- precision: `0.9496`
-- recall: `0.9470`
-- F1-score: `0.9471`
-
-Train-size regimes:
-
-- `small`: accuracy `0.9015`, F1 `0.9020`
-- `medium`: accuracy `0.9280`, F1 `0.9271`
-- `full`: accuracy `0.9470`, F1 `0.9471`
-
-Synthetic ratios in the `small` regime:
-
-- `small real only`: accuracy `0.9015`, F1 `0.9020`
-- `small + 0.5x synthetic`: accuracy `0.9205`, F1 `0.9186`
-- `small + 1.0x synthetic`: accuracy `0.9129`, F1 `0.9111`
-- `small + 2.0x synthetic`: accuracy `0.9508`, F1 `0.9498`
-
-Repeated runs for `seed = 7, 42, 99`:
-
-- `small real only`: mean accuracy `0.9003`, mean F1 `0.8998`
-- `small + 2.0x synthetic`: mean accuracy `0.9508`, mean F1 `0.9505`
-
-## Visualization
-
-Three groups of plots are already available:
-
-- `artifacts/plots` — training and metric plots;
-- `artifacts/plots_dataset` — dataset analysis plots;
-- `artifacts/plots_synthetic` — real-vs-synthetic comparison plots.
-
-## Main scripts
-
-- `scripts/prepare_dataset.py`
-- `scripts/train.py`
-- `scripts/evaluate.py`
-- `scripts/generate_synthetic.py`
-- `scripts/repeat_experiment.py`
-- `scripts/plot_results.py`
-- `scripts/plot_dataset_analysis.py`
-- `scripts/plot_synthetic_comparison.py`
+The current `composite` approach estimates a defect mask, extracts a patch, deforms it, and pastes it into a different visual context while adapting it to the target background.
 
 ## Quick start
 
 ```bash
 pip install -e .
-python scripts/prepare_dataset.py --config configs/neu_resnet_full.yaml
-python scripts/train.py --config configs/neu_resnet_full.yaml
-python scripts/evaluate.py --config configs/neu_resnet_full.yaml
-python scripts/generate_synthetic.py --config configs/neu_resnet_small_synth_double.yaml
-python scripts/repeat_experiment.py --config configs/neu_resnet_small_synth_double.yaml --seeds 7 42 99
-python scripts/plot_results.py
-python scripts/plot_dataset_analysis.py
-python scripts/plot_synthetic_comparison.py
+python scripts/prepare_dataset.py --config configs/neu_resnet_small_gpu.yaml
+python scripts/train.py --config configs/neu_resnet_small_gpu.yaml
+python scripts/evaluate.py --config configs/neu_resnet_small_gpu.yaml
+python scripts/generate_synthetic.py --config configs/magnetic_tile_binary_small_synth_composite_gpu.yaml
 ```
 
-## Next directions
+To launch the UI:
 
-- replace the controlled synthetic generator with a stronger generative model;
-- test the pipeline on another public defect dataset;
-- compare multiclass classification with binary defect detection;
-- add CSV export and publication-ready tables;
-- extend repeated-run experiments to more seeds.
+```bash
+streamlit run ui/app.py
+```
