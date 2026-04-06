@@ -1,0 +1,48 @@
+experiment:
+  name: py_crackdb_resnet18_binary_full_balanced_gpu_100
+  seed: 42
+  output_dir: artifacts/runs/py_crackdb_resnet18_binary_full_balanced_gpu_100
+
+dataset:
+  raw_dir: data/raw/py_crackdb/Classification
+  processed_dir: data/processed
+  manifest_path: data/dataset/py_crackdb_binary_full_balanced_gpu_100_manifest.json
+  image_size: 224
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  allowed_extensions:
+    - .jpg
+  max_images_per_class: null
+  train_images_per_class: null
+  label_map:
+    "With crack": defect
+    "Without crack": no_defect
+
+training:
+  batch_size: 64
+  epochs: 30
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  num_workers: 0
+  pin_memory: true
+  device: cuda
+  optimizer: adamw
+  scheduler: cosine
+  label_smoothing: 0.02
+  balanced_sampling: true
+  class_weighted_loss: true
+
+model:
+  name: resnet18
+  dropout: 0.3
+  pretrained: false
+
+synthetic:
+  enabled: false
+  multiplier: 1.0
+  method: basic
+  output_dir: data/processed/synthetic_py_crackdb_binary_full_balanced_gpu_100
+
+evaluation:
+  checkpoint_path: artifacts/runs/py_crackdb_resnet18_binary_full_balanced_gpu_100/best.pt

@@ -23,7 +23,7 @@ dataset:
 # training: экстремально короткие параметры для проверки цикла обучения.
 training:
   batch_size: 16  # batch_size: маленький батч, чтобы debug запускался даже на слабой машине.
-  epochs: 2  # epochs: минимальное число эпох; обычно 1-3 для smoke test.
+  epochs: 30  # epochs: число эпох; сейчас выровнено до 30, как и остальные конфиги.
   learning_rate: 0.0003  # learning_rate: оставляем близким к реальному, чтобы увидеть адекватные числа.
   weight_decay: 0.0001  # weight_decay: стандартная регуляризация.
   num_workers: 0  # num_workers: на Windows safest вариант = 0.
