@@ -24,6 +24,7 @@ artifacts/mplconfig/
 artifacts/cache/
 artifacts/reports/
 artifacts/ui_jobs/
+artifacts/synthetic_debug/
 data/raw/
 data/processed/
 data/dataset/

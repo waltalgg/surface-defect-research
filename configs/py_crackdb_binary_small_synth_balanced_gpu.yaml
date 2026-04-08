@@ -42,8 +42,14 @@ synthetic:
   enabled: true
   multiplier: 1.0
   method: composite
+  mask_source: segmentation
+  segmentation_checkpoint_path: artifacts/runs/py_crackdb_segmentation_gpu/best.pt
+  segmentation_image_size: 320
+  segmentation_base_channels: 48
   output_dir: data/processed/synthetic_py_crackdb_binary_small_balanced_gpu
   merged_manifest_path: data/dataset/py_crackdb_binary_small_synth_balanced_gpu_manifest.json
+  save_debug_artifacts: true
+  debug_output_dir: artifacts/synthetic_debug/py_crackdb_binary_small_synth_balanced_gpu
 
 evaluation:
   checkpoint_path: artifacts/runs/py_crackdb_resnet18_binary_small_synth_balanced_gpu/best.pt

@@ -1,0 +1,32 @@
+experiment:
+  name: py_crackdb_segmentation_gpu
+  seed: 42
+  output_dir: artifacts/runs/py_crackdb_segmentation_gpu
+
+dataset:
+  image_dir: data/raw/py_crackdb/Segmentation/Original image
+  mask_dir: data/raw/py_crackdb/Segmentation/Ground truth
+  manifest_path: data/dataset/py_crackdb_segmentation_manifest.json
+  image_size: 320
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+
+training:
+  batch_size: 8
+  epochs: 30
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  num_workers: 0
+  pin_memory: true
+  device: cuda
+  bce_weight: 0.4
+  dice_weight: 0.6
+
+model:
+  name: small_unet
+  base_channels: 48
+  dropout: 0.1
+
+evaluation:
+  checkpoint_path: artifacts/runs/py_crackdb_segmentation_gpu/best.pt

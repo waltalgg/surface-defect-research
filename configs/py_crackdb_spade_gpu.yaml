@@ -1,0 +1,33 @@
+experiment:
+  name: py_crackdb_spade_gpu
+  seed: 42
+  output_dir: artifacts/runs/py_crackdb_spade_gpu
+
+dataset:
+  image_dir: data/raw/py_crackdb/Segmentation/Original image
+  mask_dir: data/raw/py_crackdb/Segmentation/Ground truth
+  manifest_path: data/dataset/py_crackdb_spade_manifest.json
+  image_size: 256
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+
+training:
+  batch_size: 8
+  epochs: 30
+  learning_rate: 0.0002
+  disc_learning_rate: 0.0002
+  num_workers: 0
+  pin_memory: true
+  device: cuda
+  adv_weight: 1.0
+  l1_weight: 40.0
+  preview_every: 5
+
+model:
+  name: spade_generator
+  base_channels: 64
+  disc_channels: 64
+
+evaluation:
+  checkpoint_path: artifacts/runs/py_crackdb_spade_gpu/best.pt
