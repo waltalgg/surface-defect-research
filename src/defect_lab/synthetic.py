@@ -63,6 +63,29 @@ def _strong_augment_image(image: Image.Image) -> Image.Image:
     return augmented
 
 
+def _augment_background_image(image: Image.Image) -> Image.Image:
+    augmented = image.copy()
+    if random.random() > 0.5:
+        augmented = augmented.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if random.random() > 0.8:
+        augmented = augmented.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+
+    width, height = augmented.size
+    crop_scale = random.uniform(0.88, 1.0)
+    crop_width = max(16, int(width * crop_scale))
+    crop_height = max(16, int(height * crop_scale))
+    offset_x = random.randint(0, max(0, width - crop_width))
+    offset_y = random.randint(0, max(0, height - crop_height))
+    augmented = augmented.crop((offset_x, offset_y, offset_x + crop_width, offset_y + crop_height)).resize(
+        (width, height),
+        resample=Image.Resampling.BILINEAR,
+    )
+    augmented = ImageEnhance.Contrast(augmented).enhance(random.uniform(0.92, 1.18))
+    augmented = ImageEnhance.Brightness(augmented).enhance(random.uniform(0.95, 1.08))
+    augmented = ImageEnhance.Sharpness(augmented).enhance(random.uniform(0.95, 1.18))
+    return augmented
+
+
 def _background_fill_color(image: Image.Image) -> tuple[int, int, int]:
     stats = ImageStat.Stat(image.convert("RGB"))
     means = stats.mean if stats.mean else [128.0, 128.0, 128.0]
@@ -241,6 +264,134 @@ def _extract_patch_with_mask(image: Image.Image, mask: Image.Image) -> tuple[Ima
     return image.crop(crop_box), mask.crop(crop_box)
 
 
+def _extract_mask_crop(mask: Image.Image) -> Image.Image:
+    bbox = mask.getbbox()
+    width, height = mask.size
+    if bbox is None:
+        bbox = _random_crop_box(width, height)
+
+    left, top, right, bottom = bbox
+    pad_x = max(6, int((right - left) * random.uniform(0.18, 0.32)))
+    pad_y = max(6, int((bottom - top) * random.uniform(0.18, 0.32)))
+    crop_box = (
+        max(0, left - pad_x),
+        max(0, top - pad_y),
+        min(width, right + pad_x),
+        min(height, bottom + pad_y),
+    )
+    return mask.crop(crop_box)
+
+
+def _extract_crack_feature_maps(source_patch: Image.Image, patch_mask: Image.Image) -> list[Image.Image]:
+    gray = source_patch.convert("L")
+    alpha = np.asarray(patch_mask.convert("L"), dtype=np.float32) / 255.0
+    gray_arr = np.asarray(gray, dtype=np.float32)
+    source_arr = np.asarray(source_patch.convert("RGB"), dtype=np.float32)
+
+    smooth_large = np.asarray(gray.filter(ImageFilter.GaussianBlur(radius=4.2)), dtype=np.float32)
+    smooth_small = np.asarray(gray.filter(ImageFilter.GaussianBlur(radius=1.1)), dtype=np.float32)
+    smooth_rgb = np.asarray(source_patch.convert("RGB").filter(ImageFilter.GaussianBlur(radius=3.2)), dtype=np.float32)
+    detail = np.clip(smooth_large - gray_arr, 0.0, 255.0) / 255.0
+    micro = np.clip(np.abs(gray_arr - smooth_small), 0.0, 255.0) / 255.0
+    contrast = np.clip((smooth_large - smooth_small), -255.0, 255.0)
+    contrast = np.abs(contrast) / 255.0
+    residual_rgb = source_arr - smooth_rgb
+    residual_rgb = np.where(residual_rgb < 0.0, residual_rgb * 1.4, residual_rgb * 0.7)
+    residual_rgb = residual_rgb * alpha[..., None]
+    grad_y, grad_x = np.gradient(gray_arr / 255.0)
+    grad_x = np.clip(grad_x * alpha, -1.0, 1.0)
+    grad_y = np.clip(grad_y * alpha, -1.0, 1.0)
+
+    depth = np.clip(detail * (0.65 + 0.35 * alpha) + 0.3 * contrast * alpha, 0.0, 1.0)
+    texture = np.clip(micro * (0.25 + 0.75 * alpha), 0.0, 1.0)
+
+    depth_img = Image.fromarray((depth * 255.0).astype(np.uint8), mode="L")
+    texture_img = Image.fromarray((texture * 255.0).astype(np.uint8), mode="L")
+    residual_img = Image.fromarray(np.clip(residual_rgb + 128.0, 0.0, 255.0).astype(np.uint8), mode="RGB")
+    grad_x_img = Image.fromarray(np.clip(grad_x * 127.0 + 128.0, 0.0, 255.0).astype(np.uint8), mode="L")
+    grad_y_img = Image.fromarray(np.clip(grad_y * 127.0 + 128.0, 0.0, 255.0).astype(np.uint8), mode="L")
+    return [depth_img, texture_img, residual_img, grad_x_img, grad_y_img]
+
+
+def _quality_filter_mask_and_maps(mask: Image.Image, feature_maps: list[Image.Image] | None = None) -> bool:
+    if not _mask_is_usable(mask):
+        return False
+
+    alpha = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
+    bbox = mask.getbbox()
+    if bbox is None:
+        return False
+
+    left, top, right, bottom = bbox
+    width = max(1, right - left)
+    height = max(1, bottom - top)
+    area = float(width * height)
+    coverage = float(alpha.mean())
+    aspect = max(width / max(1.0, height), height / max(1.0, width))
+    mask_energy = float(alpha[left:right, top:bottom].mean()) if False else float(alpha[top:bottom, left:right].mean())
+
+    if coverage < 0.006 or coverage > 0.28:
+        return False
+    if area < 80:
+        return False
+    if aspect > 18.0:
+        return False
+    if mask_energy < 0.08:
+        return False
+
+    if feature_maps:
+        depth = np.asarray(feature_maps[0].convert("L"), dtype=np.float32) / 255.0
+        texture = np.asarray(feature_maps[1].convert("L"), dtype=np.float32) / 255.0 if len(feature_maps) > 1 else np.zeros_like(depth)
+        residual = np.asarray(feature_maps[2].convert("RGB"), dtype=np.float32) - 128.0 if len(feature_maps) > 2 else np.zeros((*depth.shape, 3), dtype=np.float32)
+        grad_x = (np.asarray(feature_maps[3].convert("L"), dtype=np.float32) - 128.0) / 127.0 if len(feature_maps) > 3 else np.zeros_like(depth)
+        grad_y = (np.asarray(feature_maps[4].convert("L"), dtype=np.float32) - 128.0) / 127.0 if len(feature_maps) > 4 else np.zeros_like(depth)
+
+        support = alpha > 0.12
+        if support.sum() < 24:
+            return False
+        depth_mean = float(depth[support].mean())
+        texture_mean = float(texture[support].mean())
+        residual_energy = float(np.abs(residual[support]).mean())
+        gradient_energy = float(np.sqrt(grad_x[support] ** 2 + grad_y[support] ** 2).mean())
+
+        if depth_mean < 0.03:
+            return False
+        if texture_mean < 0.01:
+            return False
+        if residual_energy < 2.0:
+            return False
+        if gradient_energy < 0.015:
+            return False
+
+    return True
+
+
+def _apply_seamless_like_blend(
+    background_crop: np.ndarray,
+    composite_crop: np.ndarray,
+    patch_mask: Image.Image,
+) -> np.ndarray:
+    alpha = np.asarray(patch_mask.convert("L"), dtype=np.float32) / 255.0
+    alpha = np.clip(alpha, 0.0, 1.0)
+    soft_alpha = np.asarray(
+        patch_mask.convert("L").filter(ImageFilter.GaussianBlur(radius=random.uniform(1.4, 2.8))),
+        dtype=np.float32,
+    ) / 255.0
+    soft_alpha = np.clip(soft_alpha, 0.0, 1.0)
+
+    bg_img = Image.fromarray(np.clip(background_crop, 0, 255).astype(np.uint8), mode="RGB")
+    comp_img = Image.fromarray(np.clip(composite_crop, 0, 255).astype(np.uint8), mode="RGB")
+    bg_low = np.asarray(bg_img.filter(ImageFilter.GaussianBlur(radius=6.5)), dtype=np.float32)
+    comp_low = np.asarray(comp_img.filter(ImageFilter.GaussianBlur(radius=6.5)), dtype=np.float32)
+    low_freq_delta = comp_low - bg_low
+
+    corrected = composite_crop - low_freq_delta * (0.55 * soft_alpha[..., None])
+    edge_band = np.clip(soft_alpha - alpha, 0.0, 1.0)
+    edge_mix = background_crop * edge_band[..., None] + corrected * (1.0 - edge_band[..., None])
+    final = background_crop * (1.0 - soft_alpha[..., None]) + edge_mix * soft_alpha[..., None]
+    return np.clip(final, 0, 255)
+
+
 def _deform_patch(patch: Image.Image, patch_mask: Image.Image) -> tuple[Image.Image, Image.Image]:
     fill = _background_fill_color(patch)
     angle = random.uniform(-35, 35)
@@ -304,6 +455,80 @@ def _deform_patch(patch: Image.Image, patch_mask: Image.Image) -> tuple[Image.Im
     return patch, patch_mask
 
 
+def _deform_mask_only(
+    mask: Image.Image,
+    extra_maps: list[Image.Image] | None = None,
+) -> Image.Image | tuple[Image.Image, list[Image.Image]]:
+    maps = [feature.copy() for feature in (extra_maps or [])]
+    angle = random.uniform(-40, 40)
+    mask = mask.rotate(angle, resample=Image.Resampling.BILINEAR, expand=True)
+    maps = [feature.rotate(angle, resample=Image.Resampling.BILINEAR, expand=True) for feature in maps]
+
+    scale_x = random.uniform(0.5, 1.55)
+    scale_y = random.uniform(0.5, 1.55)
+    new_width = max(20, int(mask.width * scale_x))
+    new_height = max(20, int(mask.height * scale_y))
+    mask = mask.resize((new_width, new_height), resample=Image.Resampling.BILINEAR)
+    maps = [feature.resize((new_width, new_height), resample=Image.Resampling.BILINEAR) for feature in maps]
+
+    if random.random() > 0.5:
+        mask = mask.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        maps = [feature.transpose(Image.Transpose.FLIP_LEFT_RIGHT) for feature in maps]
+
+    if random.random() > 0.45:
+        shear = random.uniform(-0.38, 0.38)
+        mask = mask.transform(
+            mask.size,
+            Image.Transform.AFFINE,
+            (1, shear, 0, 0, 1, 0),
+            resample=Image.Resampling.BILINEAR,
+        )
+        maps = [
+            feature.transform(
+                feature.size,
+                Image.Transform.AFFINE,
+                (1, shear, 0, 0, 1, 0),
+                resample=Image.Resampling.BILINEAR,
+            )
+            for feature in maps
+        ]
+
+    if random.random() > 0.45:
+        width, height = mask.size
+        shift = max(3, int(min(width, height) * random.uniform(0.05, 0.16)))
+        coeffs = (
+            1,
+            random.uniform(-0.14, 0.14),
+            random.randint(-shift, shift),
+            random.uniform(-0.14, 0.14),
+            1,
+            random.randint(-shift, shift),
+        )
+        mask = mask.transform(
+            mask.size,
+            Image.Transform.AFFINE,
+            coeffs,
+            resample=Image.Resampling.BILINEAR,
+        )
+        maps = [
+            feature.transform(
+                feature.size,
+                Image.Transform.AFFINE,
+                coeffs,
+                resample=Image.Resampling.BILINEAR,
+            )
+            for feature in maps
+        ]
+
+    mask = mask.filter(ImageFilter.MaxFilter(size=3))
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.7, 1.8)))
+    mask = ImageEnhance.Contrast(mask).enhance(random.uniform(1.15, 1.5))
+    maps = [feature.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.2, 0.9))) for feature in maps]
+    if extra_maps is None:
+        return mask
+    return mask, maps
+
+
 def _build_structural_patch(
     background_crop: Image.Image,
     patch: Image.Image,
@@ -330,55 +555,117 @@ def _build_structural_patch(
 
 def _build_mask_guided_crack_patch(
     background_crop: Image.Image,
-    patch: Image.Image,
     patch_mask: Image.Image,
+    feature_maps: list[Image.Image] | None = None,
 ) -> Image.Image:
-    patch = _match_patch_to_background(patch, background_crop)
     bg_arr = np.asarray(background_crop, dtype=np.float32)
-    patch_arr = np.asarray(patch, dtype=np.float32)
 
     bg_gray = bg_arr.mean(axis=2, keepdims=True)
-    patch_gray = patch_arr.mean(axis=2)
-    smooth_patch = np.asarray(
-        patch.convert("L").filter(ImageFilter.GaussianBlur(radius=random.uniform(1.0, 1.8))),
-        dtype=np.float32,
-    )
-    signed_dark_response = np.clip((smooth_patch - patch_gray) / 255.0, 0.0, 1.0)
-    detail_response = np.clip(np.abs(patch_gray - smooth_patch) / 255.0, 0.0, 1.0)
 
     alpha_img = patch_mask.convert("L")
     alpha = np.asarray(alpha_img, dtype=np.float32) / 255.0
     alpha = np.clip(alpha * random.uniform(0.95, 1.15), 0.0, 1.0)
 
-    # Build a darker crack core plus a softer surrounding halo so the crack is visible on sharp real backgrounds.
-    core_img = alpha_img.filter(ImageFilter.MinFilter(size=5)).filter(ImageFilter.GaussianBlur(radius=0.5))
-    halo_img = alpha_img.filter(ImageFilter.MaxFilter(size=9)).filter(ImageFilter.GaussianBlur(radius=1.7))
-    core = np.asarray(core_img, dtype=np.float32) / 255.0
-    halo = np.asarray(halo_img, dtype=np.float32) / 255.0
-    halo = np.clip(halo - 0.45 * core, 0.0, 1.0)
-    inner_glow = np.clip(core * 0.65 + signed_dark_response * 0.35, 0.0, 1.0)
+    center_img = alpha_img.filter(ImageFilter.MinFilter(size=3))
+    center_img = center_img.filter(ImageFilter.MinFilter(size=3)).filter(ImageFilter.GaussianBlur(radius=0.35))
+    wall_img = alpha_img.filter(ImageFilter.MaxFilter(size=7)).filter(ImageFilter.GaussianBlur(radius=1.05))
+    outer_img = alpha_img.filter(ImageFilter.MaxFilter(size=11)).filter(ImageFilter.GaussianBlur(radius=1.8))
 
-    crack_strength = random.uniform(0.58, 0.95)
-    halo_strength = random.uniform(0.10, 0.22)
-    rim_strength = random.uniform(0.04, 0.12)
-    texture_strength = random.uniform(0.035, 0.08)
-    grain = np.random.normal(loc=0.0, scale=random.uniform(0.8, 1.8), size=bg_arr.shape[:2]).astype(np.float32)
+    center = np.asarray(center_img, dtype=np.float32) / 255.0
+    wall = np.asarray(wall_img, dtype=np.float32) / 255.0
+    outer = np.asarray(outer_img, dtype=np.float32) / 255.0
+    wall = np.clip(wall - 0.62 * center, 0.0, 1.0)
+    outer = np.clip(outer - 0.55 * wall - 0.35 * center, 0.0, 1.0)
 
-    core_darkening = crack_strength * np.maximum(inner_glow, 0.4 * alpha)
-    halo_darkening = halo_strength * halo
-    total_darkening = np.clip(core_darkening + halo_darkening + 0.22 * detail_response * alpha, 0.0, 0.98)
+    light_dx = random.choice([-2, -1, 1, 2])
+    light_dy = random.choice([-2, -1, 1, 2])
+    bright_shift = ImageChops.offset(alpha_img, light_dx, light_dy)
+    dark_shift = ImageChops.offset(alpha_img, -light_dx, -light_dy)
+    bright_rim = np.asarray(ImageChops.subtract(bright_shift, alpha_img), dtype=np.float32) / 255.0
+    dark_rim = np.asarray(ImageChops.subtract(dark_shift, alpha_img), dtype=np.float32) / 255.0
+    bright_rim = np.clip(bright_rim, 0.0, 1.0)
+    dark_rim = np.clip(dark_rim, 0.0, 1.0)
 
-    rim = np.clip(halo - core, 0.0, 1.0)
+    transferred_residual = None
+    if feature_maps:
+        transferred_depth = np.asarray(feature_maps[0].convert("L"), dtype=np.float32) / 255.0
+        transferred_depth = np.clip(transferred_depth, 0.0, 1.0)
+        if len(feature_maps) > 1:
+            transferred_texture = np.asarray(feature_maps[1].convert("L"), dtype=np.float32) / 255.0
+            transferred_texture = np.clip(transferred_texture, 0.0, 1.0)
+        else:
+            transferred_texture = np.zeros_like(alpha)
+        if len(feature_maps) > 2:
+            transferred_residual = np.asarray(feature_maps[2].convert("RGB"), dtype=np.float32) - 128.0
+        else:
+            transferred_residual = None
+        if len(feature_maps) > 3:
+            transferred_grad_x = (np.asarray(feature_maps[3].convert("L"), dtype=np.float32) - 128.0) / 127.0
+        else:
+            transferred_grad_x = np.zeros_like(alpha)
+        if len(feature_maps) > 4:
+            transferred_grad_y = (np.asarray(feature_maps[4].convert("L"), dtype=np.float32) - 128.0) / 127.0
+        else:
+            transferred_grad_y = np.zeros_like(alpha)
+    else:
+        transferred_depth = np.clip(alpha * 0.75 + center * 0.4, 0.0, 1.0)
+        transferred_texture = np.zeros_like(alpha)
+        transferred_grad_x = np.zeros_like(alpha)
+        transferred_grad_y = np.zeros_like(alpha)
+
+    grad_y, grad_x = np.gradient(transferred_depth)
+    grad_x = 0.55 * grad_x + 0.45 * transferred_grad_x
+    grad_y = 0.55 * grad_y + 0.45 * transferred_grad_y
+    norm = np.sqrt(grad_x**2 + grad_y**2) + 1e-6
+    light_dx_f = float(random.choice([-1.4, -0.9, 0.9, 1.4]))
+    light_dy_f = float(random.choice([-1.4, -0.9, 0.9, 1.4]))
+    directional = (grad_x * light_dx_f + grad_y * light_dy_f) / norm
+    gradient_shadow = np.clip(-directional, 0.0, 1.0)
+    gradient_highlight = np.clip(directional, 0.0, 1.0)
+
+    crack_strength = random.uniform(0.48, 0.7)
+    wall_strength = random.uniform(0.10, 0.18)
+    shadow_strength = random.uniform(0.06, 0.13)
+    highlight_strength = random.uniform(0.03, 0.08)
+    texture_strength = random.uniform(0.015, 0.04)
+    grain = np.random.normal(loc=0.0, scale=random.uniform(0.25, 0.7), size=bg_arr.shape[:2]).astype(np.float32)
+
+    core_profile = np.clip(0.42 * alpha + 0.58 * transferred_depth, 0.0, 1.0)
+    core_darkening = crack_strength * np.maximum(center, core_profile)
+    wall_darkening = wall_strength * np.clip(wall + 0.45 * transferred_depth, 0.0, 1.0)
+    directional_shadow = shadow_strength * np.clip(
+        0.55 * dark_rim + 0.45 * gradient_shadow,
+        0.0,
+        1.0,
+    ) * np.clip(wall + 0.45 * outer, 0.0, 1.0)
+    total_darkening = np.clip(core_darkening + wall_darkening + directional_shadow, 0.0, 0.75)
+
     shading = bg_gray * total_darkening[..., None]
-    rim_light = bg_gray * (rim_strength * rim[..., None])
-    texture = grain[..., None] * texture_strength * (0.3 * halo[..., None] + 0.7 * core[..., None])
+    highlight_weight = highlight_strength * np.clip(
+        0.5 * bright_rim + 0.5 * gradient_highlight,
+        0.0,
+        1.0,
+    ) * np.clip(wall + 0.4 * outer, 0.0, 1.0)
+    highlight = bg_gray * highlight_weight[..., None]
+    texture_profile = np.clip(0.3 * outer + 0.45 * wall + 0.7 * transferred_texture, 0.0, 1.0)
+    texture = grain[..., None] * texture_strength * texture_profile[..., None]
+    transferred_low = transferred_texture[..., None] * random.uniform(10.0, 22.0)
+    residual_transfer = np.zeros_like(bg_arr)
+    if transferred_residual is not None:
+        residual_strength = random.uniform(0.95, 1.35)
+        residual_transfer = transferred_residual * residual_strength * np.clip(0.35 + 0.65 * alpha[..., None], 0.0, 1.0)
+    gradient_transfer = np.zeros_like(bg_arr)
+    gradient_field = np.sqrt(grad_x**2 + grad_y**2)
+    gradient_transfer[..., 0] -= 9.0 * gradient_field * np.clip(alpha + wall, 0.0, 1.0)
+    gradient_transfer[..., 1] -= 7.0 * gradient_field * np.clip(alpha + 0.8 * wall, 0.0, 1.0)
+    gradient_transfer[..., 2] -= 5.0 * gradient_field * np.clip(alpha + 0.5 * wall, 0.0, 1.0)
 
-    # Slight colored shift plus local bright rim gives the crack a shallow depth cue.
     tint = np.zeros_like(bg_arr)
-    tint[..., 2] = 7.0 * core
-    tint[..., 1] = 2.5 * halo
+    tint[..., 2] = 3.2 * center + 1.3 * wall + 1.4 * transferred_depth
+    tint[..., 1] = 0.8 * outer + 0.7 * transferred_texture
 
-    blended = bg_arr - shading + rim_light + texture - tint
+    blended = bg_arr + residual_transfer + gradient_transfer - shading + highlight + texture - tint - transferred_low
+    blended = _apply_seamless_like_blend(bg_arr, blended, patch_mask)
     blended = np.clip(blended, 0, 255).astype(np.uint8)
     return Image.fromarray(blended, mode="RGB")
 
@@ -401,14 +688,18 @@ def _paste_patch_on_background(background: Image.Image, patch: Image.Image, patc
     return canvas
 
 
-def _paste_crack_mask_on_background(background: Image.Image, patch: Image.Image, patch_mask: Image.Image) -> Image.Image:
+def _paste_crack_mask_on_background(
+    background: Image.Image,
+    patch_mask: Image.Image,
+    feature_maps: list[Image.Image] | None = None,
+) -> Image.Image:
     canvas = background.copy()
-    max_x = max(0, canvas.width - patch.width)
-    max_y = max(0, canvas.height - patch.height)
+    max_x = max(0, canvas.width - patch_mask.width)
+    max_y = max(0, canvas.height - patch_mask.height)
     offset_x = random.randint(0, max_x)
     offset_y = random.randint(0, max_y)
-    bg_crop = canvas.crop((offset_x, offset_y, offset_x + patch.width, offset_y + patch.height))
-    structured_patch = _build_mask_guided_crack_patch(bg_crop, patch, patch_mask)
+    bg_crop = canvas.crop((offset_x, offset_y, offset_x + patch_mask.width, offset_y + patch_mask.height))
+    structured_patch = _build_mask_guided_crack_patch(bg_crop, patch_mask, feature_maps=feature_maps)
     soft_mask = ImageEnhance.Contrast(patch_mask).enhance(random.uniform(1.25, 1.6))
     soft_mask = soft_mask.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.8, 1.8)))
     canvas.paste(structured_patch, (offset_x, offset_y), soft_mask)
@@ -429,19 +720,25 @@ def _composite_defect_images(
     predictor: SegmentationPredictor | None = None,
 ) -> tuple[Image.Image, Image.Image | None, tuple[int, int, int, int] | None]:
     source = _strong_augment_image(image)
-    background = _strong_augment_image(partner).resize(source.size, resample=Image.Resampling.BILINEAR)
+    background_augment = _augment_background_image(partner) if predictor is not None else _strong_augment_image(partner)
+    background = background_augment.resize(source.size, resample=Image.Resampling.BILINEAR)
     if label == "no_defect":
         return _strong_augment_image(image), None, None
 
     mask = predictor.predict_mask(source) if predictor is not None else _estimate_defect_mask(source)
     if not _mask_is_usable(mask):
         return _strong_augment_image(image), mask, mask.getbbox()
+    if predictor is not None:
+        source_patch, mask_crop = _extract_patch_with_mask(source, mask)
+        feature_maps = _extract_crack_feature_maps(source_patch, mask_crop)
+        patch_mask, feature_maps = _deform_mask_only(mask_crop, feature_maps)
+        if not _quality_filter_mask_and_maps(patch_mask, feature_maps):
+            return _strong_augment_image(image), mask, mask.getbbox()
+        return _paste_crack_mask_on_background(background, patch_mask, feature_maps=feature_maps), mask, mask.getbbox()
     patch, patch_mask = _extract_patch_with_mask(source, mask)
     patch, patch_mask = _deform_patch(patch, patch_mask)
     if not _mask_is_usable(patch_mask):
         return _strong_augment_image(image), mask, mask.getbbox()
-    if predictor is not None:
-        return _paste_crack_mask_on_background(background, patch, patch_mask), mask, mask.getbbox()
     return _paste_patch_on_background(background, patch, patch_mask), mask, mask.getbbox()
 
 
