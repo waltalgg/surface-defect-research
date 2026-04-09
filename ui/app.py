@@ -67,20 +67,13 @@ def render_controls() -> None:
         st.success(f"Queued job: {run_for_config('evaluate', selected)}")
 
     st.divider()
-    col5, col6, col7 = st.columns(3)
+    col5, col6 = st.columns(2)
     if col5.button("Export Reports", use_container_width=True):
         st.success(f"Queued job: {run_python_job('export:reports', [str(ROOT / 'scripts/export_results.py')])}")
-    if col6.button("Build Tables + Examples", use_container_width=True):
+    if col6.button("Build All Plots + Summaries", use_container_width=True):
         st.success(
-            f"Queued job: {run_python_job('reports:final', [str(ROOT / 'scripts/build_summary_and_examples.py')])}"
+            f"Queued job: {run_python_job('plots:all', [str(ROOT / 'scripts/plot_latest_results.py'), '--all'])}"
         )
-    if col7.button("Build Composite Gallery", use_container_width=True):
-        st.success(
-            f"Queued job: {run_python_job('plots:composite', [str(ROOT / 'scripts/plot_composite_examples.py')])}"
-        )
-
-    if st.button("Build Comparison Plots", use_container_width=True):
-        st.success(f"Queued job: {run_python_job('plots:current', [str(ROOT / 'scripts/plot_current_results.py')])}")
 
 
 def render_jobs() -> None:

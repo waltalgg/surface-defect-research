@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from defect_lab.cli import build_parser
 from defect_lab.config import load_config
-from defect_lab.segmentation import run_segmentation_training
+from defect_lab.segmentation.pipeline import run_segmentation_training
 
 
 def main() -> None:

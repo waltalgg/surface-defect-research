@@ -28,7 +28,6 @@ COMPOSITE_PLOTS_DIR = Path("artifacts/plots_synthetic_composite")
 DATASETS = {
     "NEU": {
         "small": "neu_resnet18_small_gpu",
-        "medium": "neu_resnet18_medium_gpu",
         "full": "neu_resnet18_full_gpu",
         "synth_half": "neu_resnet18_small_synth_half_gpu",
         "synth": "neu_resnet18_small_synth_gpu",
@@ -36,7 +35,6 @@ DATASETS = {
     },
     "Magnetic Tile": {
         "small": "magnetic_tile_resnet18_binary_small_balanced_gpu",
-        "medium": "magnetic_tile_resnet18_binary_medium_balanced_gpu",
         "full": "magnetic_tile_resnet18_binary_full_balanced_gpu",
         "synth_half": "magnetic_tile_resnet18_binary_small_synth_half_balanced_gpu",
         "synth": "magnetic_tile_resnet18_binary_small_synth_balanced_gpu",
@@ -44,7 +42,6 @@ DATASETS = {
     },
     "PY-CrackDB": {
         "small": "py_crackdb_resnet18_binary_small_balanced_gpu",
-        "medium": "py_crackdb_resnet18_binary_medium_balanced_gpu",
         "full": "py_crackdb_resnet18_binary_full_balanced_gpu",
         "synth_half": "py_crackdb_resnet18_binary_small_synth_half_balanced_gpu",
         "synth": "py_crackdb_resnet18_binary_small_synth_balanced_gpu",
@@ -54,7 +51,6 @@ DATASETS = {
 
 REGIME_LABELS = {
     "small": "small",
-    "medium": "medium",
     "full": "full",
     "synth_half": "small + 0.5x synth",
     "synth": "small + 1.0x synth",
@@ -62,7 +58,7 @@ REGIME_LABELS = {
 }
 
 PLOT_KEYS = {
-    "train_size": "Compare small/medium/full",
+    "train_size": "Compare small/full",
     "synthetic_ratio": "Compare synthetic ratios",
     "histories": "Plot best validation histories",
     "best_regimes": "Plot best regime bars",
@@ -156,7 +152,7 @@ def collect_rows() -> list[dict]:
 
 
 def plot_train_size_comparison(rows: list[dict]) -> None:
-    labels = ["small", "medium", "full"]
+    labels = ["small", "full"]
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     for ax, metric, title in [
         (axes[0], "f1", "Train Size vs F1 / Размер train и F1"),

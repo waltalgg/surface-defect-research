@@ -16,7 +16,7 @@ dataset:
   allowed_extensions:  # allowed_extensions: допустимые расширения файлов в датасете.
     - .bmp  # allowed_extensions item: пример для NEU; для других наборов можно использовать .jpg, .jpeg, .png.
   max_images_per_class: null  # max_images_per_class: максимум изображений на класс до split; null = без ограничения, либо число вроде 100, 300, 1000.
-  train_images_per_class: 40  # train_images_per_class: ограничение только для train-части; null = full regime, иначе small/medium сценарии.
+  train_images_per_class: 40  # train_images_per_class: ограничение только для train-части; null = full regime, иначе small-сценарий.
   include_classes: null  # include_classes: список классов, которые нужно оставить; null = использовать все, либо ['MT_Free', 'MT_Crack'].
   label_map: null  # label_map: словарь ремаппинга меток; null = без ремаппинга, либо {'MT_Free': 'no_defect', 'MT_Crack': 'defect'}.
 
