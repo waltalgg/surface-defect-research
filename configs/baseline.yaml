@@ -6,7 +6,7 @@ experiment:
 
 # dataset: настройки исходных данных и разбиения на train/val/test.
 dataset:
-  raw_dir: data/raw/neu_steel  # raw_dir: путь к корню датасета; обычно data/raw/neu_steel или data/raw/magnetic_tile_unpacked/...
+  raw_dir: data/raw/neu_steel  # raw_dir: путь к корню датасета; обычно data/raw/neu_steel или data/raw/py_crackdb/Classification.
   processed_dir: data/processed  # processed_dir: папка для синтетики и промежуточных данных; обычно data/processed.
   manifest_path: data/dataset/baseline_example_manifest.json  # manifest_path: путь, где будет сохранен manifest со split-ами.
   image_size: 224  # image_size: итоговый размер изображения после preprocess; частые значения 128, 160, 224, 256.

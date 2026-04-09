@@ -45,6 +45,11 @@ def _load_run_record(run_dir: Path) -> dict | None:
     metrics_payload = _safe_read_json(run_dir / "test_metrics.json")
     if metrics_payload is None:
         return None
+    if "metrics" not in metrics_payload:
+        return None
+    required_metric_keys = {"accuracy", "precision", "recall", "f1"}
+    if not required_metric_keys.issubset(set(metrics_payload["metrics"].keys())):
+        return None
 
     checkpoint_path = run_dir / "best.pt"
     if not checkpoint_path.exists():

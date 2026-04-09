@@ -6,7 +6,7 @@ experiment:
 
 # dataset: минимальные настройки, чтобы прогон был коротким.
 dataset:
-  raw_dir: data/raw/neu_steel  # raw_dir: какой датасет использовать для smoke test; можно поменять на magnetic_tile при необходимости.
+  raw_dir: data/raw/neu_steel  # raw_dir: какой датасет использовать для smoke test; можно поменять на py_crackdb при необходимости.
   processed_dir: data/processed  # processed_dir: папка промежуточных данных.
   manifest_path: data/dataset/debug_example_manifest.json  # manifest_path: куда сохранить debug-manifest.
   image_size: 160  # image_size: уменьшенный размер для быстрого теста; частые debug-значения 128 или 160.

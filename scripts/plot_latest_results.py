@@ -33,13 +33,6 @@ DATASETS = {
         "synth": "neu_resnet18_small_synth_gpu",
         "synth_double": "neu_resnet18_small_synth_double_gpu",
     },
-    "Magnetic Tile": {
-        "small": "magnetic_tile_resnet18_binary_small_balanced_gpu",
-        "full": "magnetic_tile_resnet18_binary_full_balanced_gpu",
-        "synth_half": "magnetic_tile_resnet18_binary_small_synth_half_balanced_gpu",
-        "synth": "magnetic_tile_resnet18_binary_small_synth_balanced_gpu",
-        "synth_double": "magnetic_tile_resnet18_binary_small_synth_double_balanced_gpu",
-    },
     "PY-CrackDB": {
         "small": "py_crackdb_resnet18_binary_small_balanced_gpu",
         "full": "py_crackdb_resnet18_binary_full_balanced_gpu",
@@ -69,7 +62,6 @@ PLOT_KEYS = {
 
 SYNTHETIC_MANIFESTS = {
     "NEU": Path("data/processed/synthetic_neu_small_double_gpu/synthetic_manifest.json"),
-    "Magnetic Tile": Path("data/processed/synthetic_magnetic_tile_binary_small_double_balanced_gpu/synthetic_manifest.json"),
     "PY-CrackDB": Path("data/processed/synthetic_py_crackdb_binary_small_double_balanced_gpu/synthetic_manifest.json"),
 }
 
@@ -364,7 +356,7 @@ def generate_synthetic_examples() -> None:
 
 
 def generate_composite_examples() -> None:
-    manifest_path = Path("data/processed/synthetic_magnetic_tile_binary_small_composite_gpu/synthetic_manifest.json")
+    manifest_path = Path("data/processed/synthetic_py_crackdb_binary_small_balanced_gpu/synthetic_manifest.json")
     if manifest_path.exists():
         build_composite_gallery(manifest_path, COMPOSITE_PLOTS_DIR)
 

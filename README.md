@@ -22,7 +22,6 @@
 В проекте сейчас используются:
 
 - `NEU Steel Surface Defect Dataset` — многоклассовый набор дефектов металлической поверхности;
-- `Magnetic Tile Surface Defects` — компактный industrial dataset для multiclass и binary-экспериментов;
 - `PY-CrackDB` — дорожный датасет трещин, подготовленный для следующего этапа экспериментов.
 
 ## Как устроена синтетика
@@ -43,7 +42,7 @@ pip install -e .
 python scripts/prepare_dataset.py --config configs/neu_resnet_small_gpu.yaml
 python scripts/train.py --config configs/neu_resnet_small_gpu.yaml
 python scripts/evaluate.py --config configs/neu_resnet_small_gpu.yaml
-python scripts/generate_synthetic.py --config configs/magnetic_tile_binary_small_synth_composite_gpu.yaml
+python scripts/generate_synthetic.py --config configs/py_crackdb_binary_small_synth_balanced_gpu.yaml
 ```
 
 Для запуска UI:
@@ -88,7 +87,6 @@ This repository contains a computer vision research pipeline for surface defect 
 The project currently uses:
 
 - `NEU Steel Surface Defect Dataset` for multiclass metal surface defect recognition;
-- `Magnetic Tile Surface Defects` as a compact industrial dataset for multiclass and binary experiments;
 - `PY-CrackDB` as a road crack dataset prepared for the next experimental stage.
 
 ## Synthetic data pipeline
@@ -109,7 +107,7 @@ pip install -e .
 python scripts/prepare_dataset.py --config configs/neu_resnet_small_gpu.yaml
 python scripts/train.py --config configs/neu_resnet_small_gpu.yaml
 python scripts/evaluate.py --config configs/neu_resnet_small_gpu.yaml
-python scripts/generate_synthetic.py --config configs/magnetic_tile_binary_small_synth_composite_gpu.yaml
+python scripts/generate_synthetic.py --config configs/py_crackdb_binary_small_synth_balanced_gpu.yaml
 ```
 
 To launch the UI:
