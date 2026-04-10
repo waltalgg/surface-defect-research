@@ -1,0 +1,33 @@
+experiment:
+  name: neu_segmentation_gpu
+  seed: 42
+  output_dir: artifacts/runs/neu_segmentation_gpu
+
+dataset:
+  raw_dir: data/raw/neu_steel
+  image_dir: data/processed/neu_segmentation/images
+  mask_dir: data/processed/neu_segmentation/masks
+  manifest_path: data/dataset/neu_segmentation_manifest.json
+  image_size: 224
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+
+training:
+  batch_size: 16
+  epochs: 100
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  num_workers: 0
+  pin_memory: true
+  device: cuda
+  bce_weight: 0.4
+  dice_weight: 0.6
+
+model:
+  name: small_unet
+  base_channels: 32
+  dropout: 0.1
+
+evaluation:
+  checkpoint_path: artifacts/runs/neu_segmentation_gpu/best.pt

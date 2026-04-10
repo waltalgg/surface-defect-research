@@ -29,9 +29,9 @@ DATASETS = {
     "NEU": {
         "small": "neu_resnet18_small_gpu",
         "full": "neu_resnet18_full_gpu",
-        "synth_half": "neu_resnet18_small_synth_half_gpu",
-        "synth": "neu_resnet18_small_synth_gpu",
-        "synth_double": "neu_resnet18_small_synth_double_gpu",
+        "synth_half": "neu_resnet18_small_synth_half_segmentation_gpu",
+        "synth": "neu_resnet18_small_synth_segmentation_gpu",
+        "synth_double": "neu_resnet18_small_synth_double_segmentation_gpu",
     },
     "PY-CrackDB": {
         "small": "py_crackdb_resnet18_binary_small_balanced_gpu",
@@ -55,13 +55,15 @@ PLOT_KEYS = {
     "synthetic_ratio": "Compare synthetic ratios",
     "histories": "Plot best validation histories",
     "best_regimes": "Plot best regime bars",
+    "all_results_overview": "Plot unified overview from all_results_table",
+    "epoch_comparison": "Plot retained 30 vs 100 epoch comparison",
     "synthetic_examples": "Generate real vs synthetic galleries",
     "composite_examples": "Generate composite galleries",
     "summary": "Write CSV and Markdown summaries",
 }
 
 SYNTHETIC_MANIFESTS = {
-    "NEU": Path("data/processed/synthetic_neu_small_double_gpu/synthetic_manifest.json"),
+    "NEU": Path("data/processed/synthetic_neu_small_double_segmentation_gpu/synthetic_manifest.json"),
     "PY-CrackDB": Path("data/processed/synthetic_py_crackdb_binary_small_double_balanced_gpu/synthetic_manifest.json"),
 }
 
@@ -126,10 +128,18 @@ def load_gray(path: Path) -> np.ndarray:
         return np.asarray(image.convert("L"), dtype=np.float32)
 
 
+def load_csv_rows(path: Path) -> list[dict]:
+    with path.open("r", encoding="utf-8", newline="") as fh:
+        return list(csv.DictReader(fh))
+
+
 def collect_rows() -> list[dict]:
     rows = []
     for dataset_name, runs in DATASETS.items():
         for regime_key, run_name in runs.items():
+            metrics_path = RUNS_DIR / run_name / "test_metrics.json"
+            if not metrics_path.exists():
+                continue
             metrics = load_metrics(run_name)
             rows.append(
                 {
@@ -143,6 +153,18 @@ def collect_rows() -> list[dict]:
     return rows
 
 
+def shorten_experiment(name: str) -> str:
+    value = name.replace("neu_resnet18_", "neu_")
+    value = value.replace("py_crackdb_resnet18_binary_", "py_")
+    value = value.replace("_balanced_gpu", "")
+    value = value.replace("_segmentation_gpu", "_seg")
+    value = value.replace("_gpu", "")
+    value = value.replace("small_synth_half", "small+0.5x")
+    value = value.replace("small_synth_double", "small+2.0x")
+    value = value.replace("small_synth", "small+1.0x")
+    return value
+
+
 def plot_train_size_comparison(rows: list[dict]) -> None:
     labels = ["small", "full"]
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
@@ -151,6 +173,8 @@ def plot_train_size_comparison(rows: list[dict]) -> None:
         (axes[1], "accuracy", "Train Size vs Accuracy / Размер train и accuracy"),
     ]:
         for dataset_name in DATASETS:
+            if not all(any(row["dataset"] == dataset_name and row["regime_key"] == label for row in rows) for label in labels):
+                continue
             values = [
                 next(row[metric] for row in rows if row["dataset"] == dataset_name and row["regime_key"] == label)
                 for label in labels
@@ -172,6 +196,8 @@ def plot_synthetic_comparison(rows: list[dict]) -> None:
         (axes[1], "accuracy", "Synthetic Ratio vs Accuracy / Доля синтетики и accuracy"),
     ]:
         for dataset_name in DATASETS:
+            if not all(any(row["dataset"] == dataset_name and row["regime_key"] == label for row in rows) for label in labels):
+                continue
             values = [
                 next(row[metric] for row in rows if row["dataset"] == dataset_name and row["regime_key"] == label)
                 for label in labels
@@ -188,6 +214,8 @@ def plot_best_histories(rows: list[dict]) -> None:
     selected = {}
     for dataset_name in DATASETS:
         dataset_rows = [row for row in rows if row["dataset"] == dataset_name]
+        if not dataset_rows:
+            continue
         best_row = max(dataset_rows, key=lambda row: row["f1"])
         selected[f"{dataset_name}: {best_row['regime']}"] = best_row["run_name"]
 
@@ -218,6 +246,8 @@ def plot_best_regime_bars(rows: list[dict]) -> None:
     best_rows = []
     for dataset_name in DATASETS:
         dataset_rows = [row for row in rows if row["dataset"] == dataset_name]
+        if not dataset_rows:
+            continue
         best_rows.append(max(dataset_rows, key=lambda row: row["f1"]))
 
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -231,6 +261,169 @@ def plot_best_regime_bars(rows: list[dict]) -> None:
     for idx, value in enumerate(f1_values):
         ax.text(idx, value + 0.01, f"{value:.3f}", ha="center", fontsize=9)
     save_figure(fig, "04_best_regime_bars.png")
+
+
+def plot_all_results_overview() -> None:
+    table_path = REPORTS_DIR / "all_results_table.csv"
+    if not table_path.exists():
+        return
+
+    rows = load_csv_rows(table_path)
+    classification_rows = [row for row in rows if row["task_type"] == "classification"]
+    segmentation_rows = [row for row in rows if row["task_type"] == "segmentation"]
+    generation_rows = [row for row in rows if row["task_type"] == "generation"]
+
+    classification_rows.sort(key=lambda row: (row["dataset_name"], float(row["primary_metric_value"])))
+    segmentation_rows.sort(key=lambda row: row["dataset_name"])
+    generation_rows.sort(key=lambda row: row["dataset_name"])
+
+    fig, axes = plt.subplots(3, 1, figsize=(15, 15), height_ratios=[2.4, 1.1, 0.8])
+
+    ax = axes[0]
+    colors = []
+    labels = []
+    values = []
+    for row in classification_rows:
+        labels.append(f"{row['dataset_name']} | {shorten_experiment(row['experiment'])}")
+        values.append(float(row["primary_metric_value"]))
+        colors.append("#4c72b0" if row["dataset_name"] == "neu_steel" else "#dd8452")
+
+    positions = range(len(classification_rows))
+    ax.barh(list(positions), values, color=colors)
+    ax.set_yticks(list(positions), labels)
+    ax.set_xlim(0.85, 1.0)
+    ax.set_xlabel("F1")
+    ax.set_title("Classification Overview / Classification")
+    ax.grid(axis="x", alpha=0.3)
+    for idx, value in enumerate(values):
+        ax.text(value + 0.001, idx, f"{value:.4f}", va="center", fontsize=8)
+
+    ax = axes[1]
+    if segmentation_rows:
+        seg_positions = range(len(segmentation_rows))
+        dice_values = [float(row["primary_metric_value"]) for row in segmentation_rows]
+        iou_values = [float(row["secondary_metric_value"]) for row in segmentation_rows]
+        width = 0.35
+        ax.bar([pos - width / 2 for pos in seg_positions], dice_values, width=width, label="Dice")
+        ax.bar([pos + width / 2 for pos in seg_positions], iou_values, width=width, label="IoU")
+        ax.set_xticks(list(seg_positions), [row["dataset_name"] for row in segmentation_rows])
+        ax.set_ylim(0.0, 0.7)
+        ax.set_ylabel("Score")
+        ax.set_title("Segmentation Overview / Segmentation")
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend()
+    else:
+        ax.text(0.5, 0.5, "No segmentation rows", ha="center", va="center")
+        ax.set_axis_off()
+
+    ax = axes[2]
+    if generation_rows:
+        gen_positions = range(len(generation_rows))
+        l1_values = [float(row["primary_metric_value"]) for row in generation_rows]
+        ax.bar(list(gen_positions), l1_values, color="#55a868")
+        ax.set_xticks(list(gen_positions), [row["dataset_name"] for row in generation_rows])
+        ax.set_ylabel("L1")
+        ax.set_title("Generation Overview / Generation")
+        ax.grid(axis="y", alpha=0.3)
+        for idx, value in enumerate(l1_values):
+            ax.text(idx, value + 0.003, f"{value:.4f}", ha="center", fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "No generation rows", ha="center", va="center")
+        ax.set_axis_off()
+
+    save_figure(fig, "05_all_results_overview.png")
+
+
+def collect_epoch_pairs() -> list[dict]:
+    table_path = REPORTS_DIR / "all_results_table.csv"
+    if not table_path.exists():
+        return []
+    rows = load_csv_rows(table_path)
+    relevant = [row for row in rows if row["task_type"] == "classification" and row["dataset_name"] == "neu_steel"]
+    mapping_30 = {
+        "0.5x": "neu_resnet18_small_synth_half_gpu",
+        "1.0x": "neu_resnet18_small_synth_gpu",
+        "2.0x": "neu_resnet18_small_synth_double_gpu",
+    }
+    mapping_100 = {
+        "0.5x": "neu_resnet18_small_synth_half_segmentation_gpu",
+        "1.0x": "neu_resnet18_small_synth_segmentation_gpu",
+        "2.0x": "neu_resnet18_small_synth_double_segmentation_gpu",
+    }
+    by_name = {row["experiment"]: row for row in relevant}
+    pairs = []
+    for label in ["0.5x", "1.0x", "2.0x"]:
+        row_30 = by_name.get(mapping_30[label])
+        row_100 = by_name.get(mapping_100[label])
+        if row_30 and row_100:
+            pairs.append(
+                {
+                    "regime": label,
+                    "f1_30": float(row_30["primary_metric_value"]),
+                    "f1_100": float(row_100["primary_metric_value"]),
+                    "acc_30": float(row_30["secondary_metric_value"]),
+                    "acc_100": float(row_100["secondary_metric_value"]),
+                }
+            )
+    return pairs
+
+
+def plot_epoch_comparison() -> None:
+    pairs = collect_epoch_pairs()
+    if not pairs:
+        return
+
+    labels = [pair["regime"] for pair in pairs]
+    x = range(len(labels))
+    width = 0.36
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+    f1_30 = [pair["f1_30"] for pair in pairs]
+    f1_100 = [pair["f1_100"] for pair in pairs]
+    axes[0].bar([idx - width / 2 for idx in x], f1_30, width=width, label="30 epochs")
+    axes[0].bar([idx + width / 2 for idx in x], f1_100, width=width, label="100 epochs")
+    axes[0].set_xticks(list(x), labels)
+    axes[0].set_ylim(0.94, 0.98)
+    axes[0].set_ylabel("F1")
+    axes[0].set_title("NEU Synthetic: 30 vs 100 Epochs / F1")
+    axes[0].grid(axis="y", alpha=0.3)
+    axes[0].legend()
+
+    acc_30 = [pair["acc_30"] for pair in pairs]
+    acc_100 = [pair["acc_100"] for pair in pairs]
+    axes[1].bar([idx - width / 2 for idx in x], acc_30, width=width, label="30 epochs")
+    axes[1].bar([idx + width / 2 for idx in x], acc_100, width=width, label="100 epochs")
+    axes[1].set_xticks(list(x), labels)
+    axes[1].set_ylim(0.94, 0.98)
+    axes[1].set_ylabel("Accuracy")
+    axes[1].set_title("NEU Synthetic: 30 vs 100 Epochs / Accuracy")
+    axes[1].grid(axis="y", alpha=0.3)
+    axes[1].legend()
+
+    fig.suptitle(
+        "Retained epoch comparison\nOnly NEU synthetic pairs are directly available in the current workspace; "
+        "100-epoch runs use the current mask-guided NEU pipeline.",
+        fontsize=11,
+    )
+    save_figure(fig, "06_epoch_30_vs_100.png")
+
+    lines = [
+        "# Epoch 30 vs 100",
+        "",
+        "Only retained directly comparable local pairs are included here.",
+        "For `NEU`, the 100-epoch line uses the current mask-guided synthetic pipeline.",
+        "",
+        "| Regime | F1 @ 30 | F1 @ 100 | ΔF1 | Acc @ 30 | Acc @ 100 | ΔAcc |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for pair in pairs:
+        delta_f1 = pair["f1_100"] - pair["f1_30"]
+        delta_acc = pair["acc_100"] - pair["acc_30"]
+        lines.append(
+            f"| {pair['regime']} | {pair['f1_30']:.4f} | {pair['f1_100']:.4f} | {delta_f1:+.4f} | "
+            f"{pair['acc_30']:.4f} | {pair['acc_100']:.4f} | {delta_acc:+.4f} |"
+        )
+    (REPORTS_DIR / "epoch_30_vs_100_table.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def select_examples(manifest_path: Path, per_label: int) -> list[tuple[str, Path, Path]]:
@@ -430,6 +623,8 @@ def main() -> None:
         "synthetic_ratio": lambda: plot_synthetic_comparison(rows),
         "histories": lambda: plot_best_histories(rows),
         "best_regimes": lambda: plot_best_regime_bars(rows),
+        "all_results_overview": plot_all_results_overview,
+        "epoch_comparison": plot_epoch_comparison,
         "synthetic_examples": generate_synthetic_examples,
         "composite_examples": generate_composite_examples,
         "summary": lambda: write_summary_files(rows),
