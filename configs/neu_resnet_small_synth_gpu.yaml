@@ -1,7 +1,7 @@
 experiment:
-  name: neu_resnet18_small_synth_gpu
+  name: neu_resnet18_small_synth_gpu_e100
   seed: 42
-  output_dir: artifacts/runs/neu_resnet18_small_synth_gpu
+  output_dir: artifacts/runs/neu_resnet18_small_synth_gpu_e100
 
 dataset:
   raw_dir: data/raw/neu_steel
@@ -18,7 +18,7 @@ dataset:
 
 training:
   batch_size: 64
-  epochs: 30
+  epochs: 100
   learning_rate: 0.0003
   weight_decay: 0.0001
   num_workers: 0
@@ -41,4 +41,4 @@ synthetic:
   merged_manifest_path: data/dataset/neu_steel_small_synth_gpu_manifest.json
 
 evaluation:
-  checkpoint_path: artifacts/runs/neu_resnet18_small_synth_gpu/best.pt
+  checkpoint_path: artifacts/runs/neu_resnet18_small_synth_gpu_e100/best.pt

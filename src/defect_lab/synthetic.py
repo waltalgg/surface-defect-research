@@ -6,11 +6,13 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import torch
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps, ImageStat
 
 from .config import Config
 from .data import load_manifest
 from .segmentation import SegmentationPredictor
+from .spade.model import SpadeGenerator
 from .utils import ensure_dir, set_seed
 
 
@@ -749,6 +751,69 @@ def _build_class_pools(train_items: list[dict[str, str]]) -> dict[str, list[dict
     return dict(pools)
 
 
+def _load_spade_generator(checkpoint_path: str, device: str, base_channels: int) -> SpadeGenerator:
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    generator = SpadeGenerator(base_channels=base_channels).to(device)
+    generator.load_state_dict(checkpoint["generator_state"])
+    generator.eval()
+    return generator
+
+
+def _resolve_spade_mask_path(source_path: Path, synthetic_cfg: dict) -> Path | None:
+    mask_dir = synthetic_cfg.get("spade_mask_dir")
+    if not mask_dir:
+        return None
+    candidate = Path(mask_dir) / f"{source_path.stem}.png"
+    return candidate if candidate.exists() else None
+
+
+def _transform_spade_mask(mask: Image.Image, canvas_size: int) -> Image.Image:
+    transformed = mask.convert("L")
+    if random.random() > 0.5:
+        transformed = transformed.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if random.random() > 0.7:
+        transformed = transformed.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+
+    angle = random.uniform(-22.0, 22.0)
+    transformed = transformed.rotate(angle, resample=Image.Resampling.NEAREST, fillcolor=0)
+    bbox = transformed.getbbox()
+    if bbox is not None:
+        transformed = transformed.crop(bbox)
+
+    crop_w, crop_h = transformed.size
+    scale = random.uniform(0.75, 1.3)
+    target_w = max(16, min(canvas_size - 8, int(crop_w * scale)))
+    target_h = max(16, min(canvas_size - 8, int(crop_h * scale)))
+    transformed = transformed.resize((target_w, target_h), resample=Image.Resampling.NEAREST)
+
+    canvas = Image.new("L", (canvas_size, canvas_size), 0)
+    max_x = max(0, canvas_size - target_w)
+    max_y = max(0, canvas_size - target_h)
+    offset_x = random.randint(0, max_x)
+    offset_y = random.randint(0, max_y)
+    canvas.paste(transformed, (offset_x, offset_y))
+
+    canvas = canvas.filter(ImageFilter.MaxFilter(size=3))
+    return canvas.point(lambda px: 255 if px > 20 else 0, mode="L")
+
+
+def _generate_spade_image(
+    generator: SpadeGenerator,
+    mask: Image.Image,
+    device: str,
+    image_size: int,
+) -> Image.Image:
+    mask_array = (np.asarray(mask.convert("L").resize((image_size, image_size), resample=Image.Resampling.NEAREST)) > 0).astype(
+        np.float32
+    )
+    mask_tensor = torch.from_numpy(mask_array).unsqueeze(0).unsqueeze(0).to(device)
+    with torch.inference_mode():
+        generated = generator(mask_tensor)[0].detach().cpu()
+    generated = ((generated.clamp(-1.0, 1.0) + 1.0) / 2.0) * 255.0
+    generated_array = generated.permute(1, 2, 0).numpy().astype(np.uint8)
+    return Image.fromarray(generated_array, mode="RGB")
+
+
 def generate_synthetic_dataset(config: Config) -> None:
     synthetic_cfg = config["synthetic"]
     if not synthetic_cfg["enabled"]:
@@ -773,6 +838,7 @@ def generate_synthetic_dataset(config: Config) -> None:
     )
     mask_source = str(synthetic_cfg.get("mask_source", "heuristic")).lower()
     segmentation_predictor = None
+    spade_generator = None
     if method == "composite" and mask_source == "segmentation":
         checkpoint_path = synthetic_cfg.get("segmentation_checkpoint_path")
         if not checkpoint_path:
@@ -782,6 +848,15 @@ def generate_synthetic_dataset(config: Config) -> None:
             device=str(config["training"]["device"]),
             image_size=int(synthetic_cfg.get("segmentation_image_size", config["dataset"]["image_size"])),
             base_channels=int(synthetic_cfg.get("segmentation_base_channels", 32)),
+        )
+    elif method == "spade":
+        checkpoint_path = synthetic_cfg.get("spade_checkpoint_path")
+        if not checkpoint_path:
+            raise ValueError("synthetic.method=spade requires synthetic.spade_checkpoint_path")
+        spade_generator = _load_spade_generator(
+            checkpoint_path=str(checkpoint_path),
+            device=str(config["training"]["device"]),
+            base_channels=int(synthetic_cfg.get("spade_base_channels", 64)),
         )
 
     if target_count == 0:
@@ -820,6 +895,28 @@ def generate_synthetic_dataset(config: Config) -> None:
                         item["label"],
                         predictor=segmentation_predictor,
                     )
+            elif method == "spade":
+                if item["label"] == "defect":
+                    mask_path = _resolve_spade_mask_path(source_path, synthetic_cfg)
+                    if mask_path is None:
+                        synthetic = _strong_augment_image(image)
+                    else:
+                        source_paths.append(str(mask_path.as_posix()))
+                        with Image.open(mask_path).convert("L") as mask_image:
+                            transformed_mask = _transform_spade_mask(
+                                mask_image,
+                                int(synthetic_cfg.get("spade_image_size", 256)),
+                            )
+                        debug_mask = transformed_mask.resize(image.size, resample=Image.Resampling.NEAREST)
+                        debug_bbox = debug_mask.getbbox()
+                        synthetic = _generate_spade_image(
+                            generator=spade_generator,
+                            mask=transformed_mask,
+                            device=str(config["training"]["device"]),
+                            image_size=int(synthetic_cfg.get("spade_image_size", 256)),
+                        ).resize(image.size, resample=Image.Resampling.BILINEAR)
+                else:
+                    synthetic = _augment_background_image(image)
             else:
                 raise ValueError(f"Unsupported synthetic method: {method}")
             synthetic.save(target_path)
